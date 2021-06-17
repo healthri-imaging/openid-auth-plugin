@@ -18,7 +18,7 @@
 package au.edu.qcif.xnat.auth.openid;
 
 import java.io.IOException;
-import java.util.Map;
+import java.util.*;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -26,12 +26,22 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.nrg.xdat.XDAT;
+import org.nrg.xdat.om.XdatUserLogin;
+import org.nrg.xdat.security.helpers.Roles;
+import org.nrg.xdat.security.helpers.UserHelper;
 import org.nrg.xdat.security.helpers.Users;
 import org.nrg.xdat.security.user.exceptions.UserInitException;
 import org.nrg.xdat.security.user.exceptions.UserNotFoundException;
+import org.nrg.xdat.turbine.utils.AccessLogger;
+import org.nrg.xft.XFTItem;
 import org.nrg.xft.event.EventDetails;
 import org.nrg.xft.event.EventUtils;
 import org.nrg.xft.security.UserI;
+import org.nrg.xft.utils.SaveItemHelper;
+import org.nrg.xft.utils.ValidationUtils.ValidationResultsI;
 import org.nrg.xnat.security.exceptions.NewAutoAccountNotAutoEnabledException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -56,9 +66,9 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Main Spring Security authentication filter.
- * 
+ *
  * @author <a href='https://github.com/shilob'>Shilo Banihit</a>
- * 
+ *
  */
 @EnableOAuth2Client
 @Slf4j
@@ -89,22 +99,22 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
 	public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
 			throws AuthenticationException, IOException, ServletException {
 		log.debug("Executed attemptAuthentication...");
-		
+
 		HttpSession session = request.getSession(false);
 		if (session != null) {
 			String requestProviderId = request.getParameter("providerId");
 			String sessionProviderId = (String) request.getSession().getAttribute("providerId");
 			if (requestProviderId != null && requestProviderId != null && !requestProviderId.equals(sessionProviderId)) {
 				log.debug("Found a session that had previously stopped during the OAuth/OIDC authentication process. Deleting the session.");
-				request.getSession().invalidate();   
-			}	
+				request.getSession().invalidate();
+			}
 		}
-		
+
 		OAuth2AccessToken accessToken;
 		try {
 			log.debug("Getting access token...");
 			accessToken = restTemplate.getAccessToken();
-			log.debug("Got access token!!! {}", accessToken);			
+			log.debug("Got access token!!! {}", accessToken);
 		} catch (final OAuth2Exception e) {
 			log.debug("Could not obtain access token", e);
 			log.debug("<<---------------------------->>");
@@ -142,7 +152,26 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
 				xdatUser = Users.getUser(user.getUsername());
 				if (xdatUser.isEnabled()) {
 					log.debug("User is enabled...");
-					return new OpenIdAuthToken(xdatUser, "openid");
+					final UsernamePasswordAuthenticationToken authToken=new OpenIdAuthToken(xdatUser, "openid");
+
+					try {
+						UserHelper.setUserHelper(request, xdatUser);
+
+						final XFTItem item = XFTItem.NewItem(XdatUserLogin.SCHEMA_ELEMENT_NAME, user);
+						item.setProperty(USER_XDAT_USER_ID, xdatUser.getID());
+						item.setProperty(LOGIN_DATE, Calendar.getInstance(TimeZone.getDefault()).getTime());
+						item.setProperty(IP_ADDRESS, AccessLogger.GetRequestIp(request));
+						item.setProperty(SESSION_ID, request.getSession().getId());
+						SaveItemHelper.authorizedSave(item, null, true, false, EventUtils.DEFAULT_EVENT(xdatUser, null)); // XnatBasicAuthenticationFilter
+					} catch (Throwable e1) {
+						log.error("", e1);
+					}
+
+					XDAT.setUserDetails(user);
+					AccessLogger.LogServiceAccess(user.getUsername(), request, "Authentication", "SUCCESS");
+					UserHelper.setUserHelper(request, user);
+
+					return authToken;
 				} else {
 					throw (AuthenticationException) (new NewAutoAccountNotAutoEnabledException(
 							"New OpenID user, needs to to be enabled.", xdatUser));
@@ -215,4 +244,8 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
 
 	}
 
+	private static final String USER_XDAT_USER_ID = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".user_xdat_user_id";
+	private static final String LOGIN_DATE        = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".login_date";
+	private static final String IP_ADDRESS        = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".ip_address";
+	private static final String SESSION_ID        = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".session_id";
 }
