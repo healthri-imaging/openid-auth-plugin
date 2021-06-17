@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
 
-import javax.servlet.http.HttpServletRequest;
+  import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.framework.annotations.XnatPlugin;
@@ -57,9 +57,9 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * XNAT Authentication plugin.
- * 
+ *
  * @author <a href='https://github.com/shilob'>Shilo Banihit</a>
- * 
+ *
  */
 @XnatPlugin(value = "openIdAuthPlugin", name = "XNAT OpenID Authentication Provider Plugin", logConfigurationFile = "au/edu/qcif/xnat/auth/openid/openid-auth-plugin-logback.xml")
 @EnableWebSecurity
@@ -74,7 +74,9 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
 					new ImplicitAccessTokenProvider(),
 					new ResourceOwnerPasswordAccessTokenProvider(),
 					new ClientCredentialsAccessTokenProvider()));
-	
+
+	private boolean skipOpenID=false;
+
 	@Autowired
 	public void setAuthenticationProviderConfigurationLocator(final AuthenticationProviderConfigurationLocator locator) {
 		_locator = locator;
@@ -97,14 +99,23 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
 	}
 
 	private void loadProps() {
-		if (_props == null && _locator != null) {
+
+		if (_props == null && _locator != null && !skipOpenID) {
+
 			final Map<String, ProviderAttributes> openIdProviders = _locator.getProviderDefinitionsByAuthMethod("openid");
 			if (openIdProviders.size() == 0) {
-				throw new RuntimeException("You must configure an OpenID provider");
+				skipOpenID=true;
+				log.error("",new RuntimeException("You must configure an OpenID provider"));
+				return;
 			}
+
 			if (openIdProviders.size() > 1) {
-				throw new RuntimeException("This plugin currently only supports one OpenID provider at a time, but I found "
-						+ openIdProviders.size() + " providers defined: " + StringUtils.join(openIdProviders.keySet(), ", "));
+				skipOpenID=true;
+				log.error("",new RuntimeException(
+						"This plugin currently only supports one OpenID provider at a time, but I found "
+								+ openIdProviders.size() + " providers defined: "
+								+ StringUtils.join(openIdProviders.keySet(), ", ")));
+				return;
 			}
 			final ProviderAttributes providerDefinition = _locator
 					.getProviderDefinition(openIdProviders.keySet().iterator().next());
@@ -133,11 +144,19 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
 	@Override
 	public void configure(final HttpSecurity http) throws Exception {
 		this.http = http;
-		
-		http.addFilterAfter(new OAuth2ClientContextFilter(), AbstractPreAuthenticatedProcessingFilter.class)
-				.addFilterAfter(createFilter(), OAuth2ClientContextFilter.class);
+		try {
+			if(!skipOpenID) {
+				http.addFilterAfter(new OAuth2ClientContextFilter(), AbstractPreAuthenticatedProcessingFilter.class)
+					.addFilterAfter(createFilter(), OAuth2ClientContextFilter.class);
+			}
+		}catch(Throwable e){
+			log.error("",e);
+			if(!skipOpenID){
+				throw e;
+			}
+		}
 	}
-	
+
 	private boolean isPkceEnabled(String providerId) {
 		String pkceEnabled = getProperty(providerId, PKCE_ENABLED);
 		if (pkceEnabled != null) {
@@ -204,7 +223,7 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
         template.setAccessTokenProvider(accessTokenProviderChain);
 		return template;
 	}
-	
+
 	/*
 	private AuthorizationCodeAccessTokenProvider getAuthorizationCodeAccessTokenProvider(boolean pkceEnabled) {
 		AuthorizationCodeAccessTokenProvider authCodeAccessTokenProvider = new AuthorizationCodeAccessTokenProvider();
