@@ -32,6 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
+import org.springframework.security.authentication.AuthenticationEventPublisher;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -81,6 +82,11 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
 		loadProps();
 	}
 
+	@Autowired
+	public void setAuthenticationEventPublisher(AuthenticationEventPublisher eventPublisher) {
+		this._eventPublisher = eventPublisher;
+	}
+
 	public boolean isEnabled(String providerId) {
 		getEnabledProviders();
 		for (String provider : _enabledProviders) {
@@ -127,7 +133,7 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
 	@Bean
 	@Scope("prototype")
 	public OpenIdConnectFilter createFilter() {
-		return new OpenIdConnectFilter(getProps().getProperty("preEstablishedRedirUri"), this);
+		return new OpenIdConnectFilter(getProps().getProperty("preEstablishedRedirUri"), this, _eventPublisher);
 	}
 
 	@Override
@@ -148,6 +154,7 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
 	}
 
 	private AuthenticationProviderConfigurationLocator _locator;
+	private AuthenticationEventPublisher _eventPublisher;
 	private static String _id = "openid";
 	private Properties _props;
 	private String[] _enabledProviders;
