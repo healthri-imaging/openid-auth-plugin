@@ -38,6 +38,7 @@ import org.nrg.xnat.security.exceptions.NewAutoAccountNotAutoEnabledException;
 import org.springframework.http.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.security.authentication.AuthenticationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
@@ -56,6 +57,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthToken;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 
 /**
  * Main Spring Security authentication filter.
@@ -68,24 +71,38 @@ import lombok.extern.slf4j.Slf4j;
 public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter {
 
 	private OpenIdAuthPlugin plugin;
+	private AuthenticationEventPublisher eventPublisher;
 	private String[] allowedDomains;
 
 	@Autowired
 	@Qualifier("createRestTemplate")
 	private OAuth2RestTemplate restTemplate;
 
-	public OpenIdConnectFilter(String defaultFilterProcessesUrl, OpenIdAuthPlugin plugin) {
+	public OpenIdConnectFilter(String defaultFilterProcessesUrl, OpenIdAuthPlugin plugin, AuthenticationEventPublisher eventPublisher) {
 		super(defaultFilterProcessesUrl);
 		log.debug("Created filter for " + defaultFilterProcessesUrl);
 		setAuthenticationManager(new NoopAuthenticationManager());
 		// this.providerId = providerId;
 		this.plugin = plugin;
+		this.eventPublisher = eventPublisher;
+	}
+
+	@Autowired
+	@Override
+	public void setAuthenticationSuccessHandler(final AuthenticationSuccessHandler handler) {
+		super.setAuthenticationSuccessHandler(handler);
 	}
 
 	@Autowired
 	@Override
 	public void setAuthenticationFailureHandler(final AuthenticationFailureHandler handler) {
 		super.setAuthenticationFailureHandler(handler);
+	}
+
+	@Autowired
+	@Override
+	public void setSessionAuthenticationStrategy(final SessionAuthenticationStrategy strategy) {
+		super.setSessionAuthenticationStrategy(strategy);
 	}
 
 	@Override
@@ -153,7 +170,9 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
 				xdatUser = userManagementServiceInstance.getUser(user.getUsername());
 				if (xdatUser.isEnabled()) {
 					log.debug("User is enabled...");
-					return new OpenIdAuthToken(xdatUser, "openid");
+					Authentication authentication = new OpenIdAuthToken(xdatUser, "openid");
+					eventPublisher.publishAuthenticationSuccess(authentication);
+					return authentication;
 				} else {
 					throw (AuthenticationException) (new NewAutoAccountNotAutoEnabledException(
 							"New OpenID user, needs to to be enabled.", xdatUser));
