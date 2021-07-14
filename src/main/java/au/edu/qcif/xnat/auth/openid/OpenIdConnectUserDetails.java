@@ -28,6 +28,8 @@ import org.nrg.xdat.security.XDATUser;
 import org.nrg.xnat.security.XnatAuthenticationFilter;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 
+import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
+
 /**
  * OIDC user details
  *
@@ -57,14 +59,13 @@ public class OpenIdConnectUserDetails extends XDATUser {
             OpenIdAuthPlugin plugin) {
         this.openIdUserInfo = userInfo;
         this.providerId = providerId;
-//		this.setUsername(providerId + "_" + userInfo.get("sub"));
-        this.setUsername(resolvePattern(plugin.getProperty(providerId, OpenIdAuthPlugin.USERNAME_PATTERN)));
+        this.setUsername(resolvePattern(plugin.getProperty(providerId, USERNAME_PATTERN)));
         this.token = token;
         this.plugin = plugin;
 
-        this.email = getUserInfo(userInfo, "emailProperty", "");
-        this.setFirstname(getUserInfo(userInfo, "givenNameProperty", ""));
-        this.setLastname(getUserInfo(userInfo, "familyNameProperty", ""));
+        this.email = getUserInfo(userInfo, EMAIL, "");
+        this.setFirstname(getUserInfo(userInfo, GIVEN_NAME, ""));
+        this.setLastname(getUserInfo(userInfo, FAMILY_NAME, ""));
         this.name = userInfo.get("name");
         this.picture = userInfo.get("picture");
     }
@@ -131,7 +132,7 @@ public class OpenIdConnectUserDetails extends XDATUser {
     public OAuth2AccessToken getToken() {
         return token;
     }
-
+    
     public void setToken(OAuth2AccessToken token) {
         this.token = token;
     }

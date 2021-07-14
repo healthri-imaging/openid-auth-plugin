@@ -25,29 +25,24 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthRequestToken;
 import org.apache.commons.lang3.StringUtils;
 
 import org.nrg.xdat.XDAT;
-import org.nrg.xdat.entities.XdatUserAuth;
 import org.nrg.xdat.exceptions.UsernameAuthMappingNotFoundException;
+import org.nrg.xdat.preferences.SiteConfigPreferences;
 import org.nrg.xdat.security.helpers.Users;
 import org.nrg.xdat.security.services.UserManagementServiceI;
-import org.nrg.xdat.security.user.exceptions.UserInitException;
-import org.nrg.xdat.security.user.exceptions.UserNotFoundException;
 import org.nrg.xdat.services.XdatUserAuthService;
 import org.nrg.xdat.turbine.utils.TurbineUtils;
-import org.nrg.xft.event.EventDetails;
-import org.nrg.xft.event.EventUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnat.security.exceptions.NewAutoAccountNotAutoEnabledException;
-import org.nrg.xnat.security.tokens.XnatDatabaseUsernamePasswordAuthenticationToken;
 import org.springframework.http.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.jwt.Jwt;
 import org.springframework.security.jwt.JwtHelper;
 import org.springframework.security.oauth2.client.OAuth2RestTemplate;
@@ -55,8 +50,6 @@ import org.springframework.security.oauth2.common.OAuth2AccessToken;
 import org.springframework.security.oauth2.common.exceptions.InvalidTokenException;
 import org.springframework.security.oauth2.common.exceptions.OAuth2Exception;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableOAuth2Client;
-import org.springframework.security.web.DefaultRedirectStrategy;
-import org.springframework.security.web.RedirectStrategy;
 import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 
@@ -66,7 +59,8 @@ import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthToken;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
-import org.springframework.web.util.UriComponentsBuilder;
+
+import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
 
 /**
  * Main Spring Security authentication filter.
@@ -188,21 +182,14 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
                     throw new NewAutoAccountNotAutoEnabledException(
                             "New OpenID user, needs to to be enabled.", xdatUser);
                 }
-                if ((XDAT.getSiteConfigPreferences().getEmailVerification() && !xdatUser.isVerified()) || !xdatUser.isAccountNonLocked()) {
+                if ((getSiteConfigPreferences().getEmailVerification() && !xdatUser.isVerified()) || !xdatUser.isAccountNonLocked()) {
                     throw new CredentialsExpiredException("Attempted login to unverified or locked account: " + xdatUser.getUsername());
                 }
 
                 Authentication authentication = new OpenIdAuthToken(xdatUser, providerId);
 
-                // Do a hack to properly update the last login date.
-                Authentication authForEvent;
-                String loggedInUsername = xdatUser.getUsername();
-                if (loggedInUsername.equals(requesterUsername)) {
-                    authForEvent = authentication;
-                } else {
-                    authForEvent = new XnatDatabaseUsernamePasswordAuthenticationToken(xdatUser, null);
-                }
-                eventPublisher.publishAuthenticationSuccess(authForEvent);
+                Authentication authRequestToken = new OpenIdAuthRequestToken(requesterUsername, providerId);
+                eventPublisher.publishAuthenticationSuccess(authRequestToken);
 
                 return authentication;
             } catch (UsernameAuthMappingNotFoundException e) {
@@ -212,9 +199,9 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
                         e.getUsername(),
                         e.getAuthMethod(),
                         e.getAuthMethodId(),
-                        user.getOpenIdUserInfo(OpenIdAuthPlugin.EMAIL),
-                        user.getOpenIdUserInfo(OpenIdAuthPlugin.GIVEN_NAME),
-                        user.getOpenIdUserInfo(OpenIdAuthPlugin.FAMILY_NAME)
+                        user.getOpenIdUserInfo(EMAIL),
+                        user.getOpenIdUserInfo(GIVEN_NAME),
+                        user.getOpenIdUserInfo(FAMILY_NAME)
                 );
                 request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), e);
                 response.sendRedirect(TurbineUtils.GetFullServerPath() + "/app/template/RegisterExternalLogin.vm");
@@ -241,8 +228,8 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         return false;
     }
 
-    protected UserManagementServiceI getUserManagementServiceInstance() {
-        return Users.getUserManagementService();
+    protected SiteConfigPreferences getSiteConfigPreferences() {
+        return XDAT.getSiteConfigPreferences();
     }
 
     private boolean shouldFilterEmailDomains(String providerId) {

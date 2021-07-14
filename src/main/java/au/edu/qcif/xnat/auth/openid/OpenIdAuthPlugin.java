@@ -31,6 +31,7 @@ import org.nrg.xnat.security.provider.AuthenticationProviderConfigurationLocator
 import org.nrg.xnat.security.provider.ProviderAttributes;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.security.authentication.AuthenticationEventPublisher;
@@ -57,6 +58,8 @@ import au.edu.qcif.xnat.auth.openid.pkce.PkceAuthorizationCodeAccessTokenProvide
 import au.edu.qcif.xnat.auth.openid.pkce.PkceAuthorizationCodeResourceDetails;
 import lombok.extern.slf4j.Slf4j;
 
+import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.PKCE_ENABLED;
+
 /**
  * XNAT Authentication plugin.
  *
@@ -66,14 +69,9 @@ import lombok.extern.slf4j.Slf4j;
 @EnableWebSecurity
 @EnableOAuth2Client
 @Component
+@ComponentScan("au.edu.qcif.xnat.auth.openid.provider")
 @Slf4j
 public class OpenIdAuthPlugin implements XnatSecurityExtension {
-    public static final String PKCE_ENABLED = "pkceEnabled";
-    public static final String EMAIL = "emailProperty";
-    public static final String GIVEN_NAME = "givenNameProperty";
-    public static final String FAMILY_NAME = "familyNameProperty";
-    public static final String USERNAME_PATTERN = "usernamePattern";
-
     private static final AccessTokenProvider accessTokenProviderChain = new AccessTokenProviderChain(
             Arrays.<AccessTokenProvider>asList(new PkceAuthorizationCodeAccessTokenProvider(),
                     // getAuthorizationCodeAccessTokenProvider(pkceEnabled),
@@ -82,21 +80,15 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
                     new ClientCredentialsAccessTokenProvider()));
 
     @Autowired
-    public OpenIdAuthPlugin(XdatUserAuthService userAuthService) {
+    public OpenIdAuthPlugin(AuthenticationEventPublisher eventPublisher, XdatUserAuthService userAuthService) {
+        this._eventPublisher = eventPublisher;
         this._userAuthService = userAuthService;
     }
-
-    private XdatUserAuthService _userAuthService;
 
     @Autowired
     public void setAuthenticationProviderConfigurationLocator(final AuthenticationProviderConfigurationLocator locator) {
         _locator = locator;
         loadProps();
-    }
-
-    @Autowired
-    public void setAuthenticationEventPublisher(AuthenticationEventPublisher eventPublisher) {
-        this._eventPublisher = eventPublisher;
     }
 
     public boolean isEnabled(String providerId) {
@@ -256,4 +248,6 @@ public class OpenIdAuthPlugin implements XnatSecurityExtension {
         details.setPkceEnabled(isPkceEnabled(providerId));
         return details;
     }
+
+    private XdatUserAuthService _userAuthService;
 }
