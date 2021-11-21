@@ -46,7 +46,7 @@ $page.setTitle("$siteId - Please Login")
 
 #if($turbineUtils.GetPassedParameter("par",$data))
 ## create custom layout when parameters are passed to the login page from an external link.
-    <div id="login_welcome">
+    <div id="login_welcome" class="login-box-container-flex">
         #if($siteConfig.siteDescriptionType == "Text")
             <div id="siteDescription"></div>
             <textarea id="siteDescriptionMd" style="display: none;">$siteConfig.siteDescriptionText</textarea>
@@ -115,10 +115,13 @@ $page.setTitle("$siteId - Please Login")
                            data-message="Password cannot be blank.">
                 </p>
 
-                <p class="form-submit">
-                        <span id="register_forgot">
-                            <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
-                        </span>
+                <p>
+                    <span id="register_forgot">
+                        <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
+                        <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
+                    </span>
+                </p>
+                <p class="form-submit" style="margin-top:-35px;">
                     <button class="submit btn" id="loginButton" type="submit" name="login">Login</button>
                 </p>
 
@@ -147,7 +150,7 @@ $page.setTitle("$siteId - Please Login")
 #else
 ## standard layout for login page
 
-    <div id="login_welcome">
+    <div id="login_welcome" class="login-box-container-flex">
         #if($siteConfig.siteDescriptionType == "Text")
             <div id="siteDescription"></div>
             <textarea id="siteDescriptionMd" style="display: none;">$siteConfig.siteDescriptionText</textarea>
@@ -169,7 +172,7 @@ $page.setTitle("$siteId - Please Login")
 
         #end
 
-        <form name="form1" method="post" action="$content.getURI("/login")" class="noHide friendlyForm validate" id="login_form">
+        <form name="form1" method="post" action="$content.getURI("/login")" class="noHide friendlyForm validate" id="login_form" style="min-width:358px">
         	<div id="usernamepw_login" style="$usernamePasswordStyleStr">
             #if($login_methods && $login_methods.size() == 0)
                 <input type="hidden" id="login_method" name="login_method" value="Database">
@@ -201,11 +204,13 @@ $page.setTitle("$siteId - Please Login")
                        data-message="Password cannot be blank.">
             </p>
 
-            <p class="form-submit">
+            <p>
                 <span id="register_forgot">
                     <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
                     <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
                 </span>
+            </p>
+            <p class="form-submit" style="margin-top:-35px;">
                 <button class="submit btn" id="loginButton" type="submit" name="login">Login</button>
             </p>
 
