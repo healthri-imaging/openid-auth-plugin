@@ -200,8 +200,8 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
                         e.getAuthMethod(),
                         e.getAuthMethodId(),
                         user.getOpenIdUserInfo(EMAIL),
-                        user.getOpenIdUserInfo(GIVEN_NAME),
-                        user.getOpenIdUserInfo(FAMILY_NAME)
+                        user.getOpenIdUserInfo(FAMILY_NAME),
+                        user.getOpenIdUserInfo(GIVEN_NAME)
                 );
                 request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), e);
                 response.sendRedirect(TurbineUtils.GetFullServerPath() + "/app/template/RegisterExternalLogin.vm");
