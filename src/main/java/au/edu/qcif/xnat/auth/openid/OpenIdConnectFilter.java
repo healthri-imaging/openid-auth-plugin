@@ -29,12 +29,15 @@ import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthRequestToken;
 import org.apache.commons.lang3.StringUtils;
 
 import org.nrg.xdat.XDAT;
+import org.nrg.xdat.entities.XdatUserAuth;
 import org.nrg.xdat.exceptions.UsernameAuthMappingNotFoundException;
 import org.nrg.xdat.preferences.SiteConfigPreferences;
 import org.nrg.xdat.security.helpers.Users;
 import org.nrg.xdat.security.services.UserManagementServiceI;
 import org.nrg.xdat.services.XdatUserAuthService;
 import org.nrg.xdat.turbine.utils.TurbineUtils;
+import org.nrg.xft.event.EventDetails;
+import org.nrg.xft.event.EventUtils;
 import org.nrg.xft.security.UserI;
 import org.nrg.xnat.security.exceptions.NewAutoAccountNotAutoEnabledException;
 import org.springframework.http.*;
@@ -145,6 +148,8 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
             throw ex2;
         }
         String providerId = (String) request.getSession().getAttribute("providerId");
+        String requesterUsername = null;
+        UserI xdatUser = null;
         try {
             log.debug("Getting idToken...");
             final String idToken = accessToken.getAdditionalInformation().get("id_token").toString();
@@ -174,9 +179,8 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
             }
 
             log.debug("Checking if user exists...");
-            UserI xdatUser;
             try {
-                String requesterUsername = user.getUsername();
+                requesterUsername = user.getUsername();
                 xdatUser = userAuthService.getUserDetailsByNameAndAuth(requesterUsername, XdatUserAuthService.OPENID, providerId);
                 if (!xdatUser.isEnabled()) {
                     throw new NewAutoAccountNotAutoEnabledException(
@@ -186,30 +190,59 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
                     throw new CredentialsExpiredException("Attempted login to unverified or locked account: " + xdatUser.getUsername());
                 }
 
-                Authentication authentication = new OpenIdAuthToken(xdatUser, providerId);
-
-                Authentication authRequestToken = new OpenIdAuthRequestToken(requesterUsername, providerId);
-                eventPublisher.publishAuthenticationSuccess(authRequestToken);
-
-                return authentication;
             } catch (UsernameAuthMappingNotFoundException e) {
-                log.info("User {} attempted to log using authentication provider ID {}, diverting to account merge page.");
+                if (Boolean.parseBoolean(plugin.getProperty(providerId, "forceUserCreate"))) {
+                    String userAutoEnabled = plugin.getProperty(providerId, "userAutoEnabled");
+                    String userAutoVerified = plugin.getProperty(providerId, "userAutoVerified");
 
-                e = new UsernameAuthMappingNotFoundException(
-                        e.getUsername(),
-                        e.getAuthMethod(),
-                        e.getAuthMethodId(),
-                        user.getOpenIdUserInfo(EMAIL),
-                        user.getOpenIdUserInfo(FAMILY_NAME),
-                        user.getOpenIdUserInfo(GIVEN_NAME)
-                );
-                request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), e);
-                response.sendRedirect(TurbineUtils.GetFullServerPath() + "/app/template/RegisterExternalLogin.vm");
-                return null;
+                    xdatUser = Users.createUser();
+                    xdatUser.setLogin(user.getUsername());
+                    xdatUser.setFirstname(user.getFirstname());
+                    xdatUser.setLastname(user.getLastname());
+                    xdatUser.setEmail(user.getEmail());
+                    xdatUser.setEnabled(userAutoEnabled);
+                    xdatUser.setVerified(userAutoVerified);
+
+                    log.info("Create user, username: " + xdatUser.getUsername());
+                    try {
+                        UserI adminUser = Users.getUser("admin");
+                        Users.save(xdatUser, adminUser,
+                                new XdatUserAuth(user.getUsername(), XdatUserAuthService.OPENID, providerId),
+                                false, new EventDetails(EventUtils.CATEGORY.DATA,
+                                EventUtils.TYPE.WEB_SERVICE, "Added User", "Requested by user " + adminUser,
+                                "Created new user " + user.getUsername() + " through OpenID connect."));
+                    } catch (Exception ex2) {
+                        // log.warn("Ignoring exception:", ex2);
+                        log.warn("Ignoring exception: " + ex2.getMessage());
+                    }
+                } else {
+                    log.info("User {} attempted to log using authentication provider ID {}, diverting to account merge page.");
+
+                    e = new UsernameAuthMappingNotFoundException(
+                            e.getUsername(),
+                            e.getAuthMethod(),
+                            e.getAuthMethodId(),
+                            user.getOpenIdUserInfo(EMAIL),
+                            user.getOpenIdUserInfo(FAMILY_NAME),
+                            user.getOpenIdUserInfo(GIVEN_NAME)
+                    );
+                    request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), e);
+                    response.sendRedirect(TurbineUtils.GetFullServerPath() + "/app/template/RegisterExternalLogin.vm");
+                    return null;
+                }
             }
         } catch (final InvalidTokenException e) {
             throw new BadCredentialsException("Could not obtain user details from token", e);
         }
+        if (requesterUsername != null && xdatUser != null) {
+            Authentication authentication = new OpenIdAuthToken(xdatUser, providerId);
+
+            Authentication authRequestToken = new OpenIdAuthRequestToken(requesterUsername, providerId);
+            eventPublisher.publishAuthenticationSuccess(authRequestToken);
+
+            return authentication;
+        }
+        return null;
     }
 
     private boolean isAllowedEmailDomain(String email, String providerId) {
