@@ -1,19 +1,41 @@
-<!-- BEGIN xnat-templates/screens/Login.vm -->
-#* @vtlvariable name="method" type="java.lang.String" *#
-#* @vtlvariable name="login_methods" type="java.util.List" *#
-#* @vtlvariable name="turbineUtils" type="org.nrg.xdat.turbine.utils.TurbineUtils" *#
-#* @vtlvariable name="siteConfig" type="org.nrg.xdat.preferences.SiteConfigPreferences" *#
 #* @vtlvariable name="content" type="org.apache.turbine.services.pull.tools.ContentTool" *#
-#* @vtlvariable name="page" type="org.apache.turbine.util.template.HtmlPageAttributes" *#
-#* @vtlvariable name="ui" type="org.apache.turbine.services.pull.util.UIManager" *#
 #* @vtlvariable name="data" type="org.apache.turbine.util.RunData" *#
 #* @vtlvariable name="link" type="org.apache.turbine.services.pull.tools.TemplateLink" *#
+#* @vtlvariable name="login_methods" type="java.util.Collection" *#
+#* @vtlvariable name="page" type="org.apache.turbine.util.template.HtmlPageAttributes" *#
+#* @vtlvariable name="provider" type="org.nrg.xnat.security.provider.XnatAuthenticationProvider" *#
+#* @vtlvariable name="siteConfig" type="org.nrg.xdat.preferences.SiteConfigPreferences" *#
+#* @vtlvariable name="systemName" type="java.lang.String" *#
+#* @vtlvariable name="turbineUtils" type="org.nrg.xdat.turbine.utils.TurbineUtils" *#
+#* @vtlvariable name="ui" type="org.apache.turbine.services.pull.util.UIManager" *#
 <!-- OPENID BEGIN -->
 #set($pluginClassMethod = $siteConfig.getClass().forName("au.edu.qcif.xnat.auth.openid.OpenIdAuthPlugin").getMethod("getLoginStr"))
 #set($pluginClassMethodDisableUsernamePassword = $siteConfig.getClass().forName("au.edu.qcif.xnat.auth.openid.OpenIdAuthPlugin").getMethod("getUsernamePasswordStyle"))
 #set($loginStr = $pluginClassMethod.invoke(null))
 #set($usernamePasswordStyleStr = $pluginClassMethodDisableUsernamePassword.invoke(null))
 <!-- OPENID END -->
+<!-- BEGIN xnat-templates/screens/Login.vm -->
+
+#macro (showProviders $providers)
+    #* @vtlvariable name="providers" type="java.util.Collection" *#
+    #* @vtlvariable name="provider" type="org.nrg.xnat.security.provider.XnatAuthenticationProvider" *#
+    #if($providers)
+        #if($providers.isEmpty())
+        <input type="hidden" id="login_method" name="login_method" value="localdb">
+        #elseif($providers.size() == 1)
+            #set($provider = $providers.iterator().next())
+        <input type="hidden" id="login_method" name="login_method" value="$provider.providerId"/>
+        #else
+        <label for="login_method">Login</label>
+        <select id="login_method" class="xnat-menu" data-menu-opts="width:160px" name="login_method">
+            #foreach ($provider in $providers)
+                <option value="$provider.providerId">$provider.name</option>
+            #end
+        </select>
+        #end
+    #end
+#end
+
 #set ($siteId = $siteConfig.siteId)
 $page.setTitle("$siteId - Please Login")
     $page.setBgColor($ui.bgcolor)
@@ -26,27 +48,38 @@ $page.setTitle("$siteId - Please Login")
 //    XNAT.cookie.set('SESSION_LOGOUT_REDIRECT', 'true');
 </script>
 
-<div id="login_area">
-
-    <!--[if lte IE 8]>
-    <div id="ie8_error" class="error" style="display:none;margin-bottom:4em;background-image:none;z-index:9">
-            $!systemName does not support Internet Explorer version 8 or below.
-        <br><br>
-        We recommend using a modern browser such as
-        <a class="link" href="https://www.mozilla.org/en-US/firefox/desktop/" target="_blank">Mozilla Firefox</a>,
-        <a class="link" href="http://www.opera.com/" target="_blank">Opera</a>,
-        <a class="link" href="https://www.google.com/chrome/" target="_blank">Google Chrome</a>, or a newer
-        version of Internet Explorer (version 9.0 or higher).
-    </div>
-    <![endif]-->
+<!--[if lte IE 8]>
+<div id="ie8_error" class="error" style="display:none;margin-bottom:4em;background-image:none;z-index:9">
+        $!systemName does not support Internet Explorer version 8 or below.
+    <br><br>
+    We recommend using a modern browser such as
+    <a class="link" href="https://www.mozilla.org/en-US/firefox/desktop/" target="_blank">Mozilla Firefox</a>,
+    <a class="link" href="http://www.opera.com/" target="_blank">Opera</a>,
+    <a class="link" href="https://www.google.com/chrome/" target="_blank">Google Chrome</a>, or a newer
+    version of Internet Explorer (version 9.0 or higher).
+</div>
+<![endif]-->
 
 #if($siteConfig.siteWideAlertStatus != "0" && $siteConfig.siteWideAlertStatus != "off")
-    <div class="$siteConfig.siteWideAlertType" style="margin-bottom: 2em;" data-status="$siteConfig.siteWideAlertStatus">$siteConfig.siteWideAlertMessage</div>
+<div class="$siteConfig.siteWideAlertType" style="margin-bottom: 2em;" data-status="$siteConfig.siteWideAlertStatus">$siteConfig.siteWideAlertMessage</div>
 #end
+
+<div id="login_area">
 
 #if($turbineUtils.GetPassedParameter("par",$data))
 ## create custom layout when parameters are passed to the login page from an external link.
+
     <div id="login_welcome" class="login-box-container-flex">
+        #if($data.getMessage())
+            <div class="warning" style="margin-bottom: 2em;">
+                <strong>Note: </strong> $data.getMessage()
+            </div>
+        #end
+
+        <div id="PAR_welcome" style="margin-bottom: 2em; padding-bottom: 2em; border-bottom: 1px solid #eee">
+            <h1>Welcome To $siteId</h1>
+            <p>You have received an invitation to join a project on this site. To continue, please register a new account or log in with an existing one.</p>
+        </div>
         #if($siteConfig.siteDescriptionType == "Text")
             <div id="siteDescription"></div>
             <textarea id="siteDescriptionMd" style="display: none;">$siteConfig.siteDescriptionText</textarea>
@@ -59,22 +92,16 @@ $page.setTitle("$siteId - Please Login")
         #end
     </div>
 
-    #if($data.getMessage())
-    <div class="warning">
-        <strong>Note: </strong> $data.getMessage()
-    </div>
-    #end
-
-    <div id="register_box_container">
-        <h3><span>New User Registration</span> <button class="btn btn-sm" onclick="showLogin()">Already Have an Account?</button></h3>
+    <div id="register_box_container" class="login-box-container-fixed">
+        <h3><span>Register A New Account</span> <button class="btn btn-sm" onclick="showLogin()">Already Have an Account?</button></h3>
         <div class="clear"></div>
         <div id="register_box">
             #parse("/screens/register_box.vm")
         </div>
     </div>
 
-    <div id="login_box_container" class="hidden">
-        <h3><span>Existing User Login</span> <button class="btn btn-sm" onclick="showRegistration()">Register?</button> </h3>
+    <div id="login_box_container" class="hidden login-box-container-fixed">
+        <h3><span>Login</span> <button class="btn btn-sm" onclick="showRegistration()">Register?</button> </h3>
         <div class="clear"></div>
         <div class="message">
             <strong>Note: </strong> It looks like you received an invitation to join this site via email. Logging in here will accept that invitation and tie it with your existing $siteConfig.siteId account.
@@ -84,16 +111,7 @@ $page.setTitle("$siteId - Please Login")
         <div class="clear" style="margin:2em 0;"></div>
         <div id="login_box">
             <form name="form1" method="post" action="$content.getURI("/login")" class="noHide friendlyForm validate" id="login_form">
-                #if($login_methods && $login_methods.size() == 0)
-                    <input type="hidden" id="login_method" name="login_method" value="Database">
-                #elseif($login_methods && $login_methods.size() > 1)
-                    <label for="login_method">Login</label>
-                    <select id="login_method" class="xnat-menu" data-menu-opts="width:160px" name="login_method">
-                        #foreach ($method in $login_methods)
-                            <option value="$method">$method</option>
-                        #end
-                    </select>
-                #end
+                #showProviders($login_methods)
                 <p>
                     <label for="username">User</label>
                     <input type="text"
@@ -115,13 +133,11 @@ $page.setTitle("$siteId - Please Login")
                            data-message="Password cannot be blank.">
                 </p>
 
-                <p>
-                    <span id="register_forgot">
-                        <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
-                        <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
-                    </span>
-                </p>
-                <p class="form-submit" style="margin-top:-35px;">
+                <p class="form-submit">
+                        <span id="register_forgot">
+                            <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
+                        </span>
+                        
                     <button class="submit btn" id="loginButton" type="submit" name="login">Login</button>
                 </p>
 
@@ -163,27 +179,18 @@ $page.setTitle("$siteId - Please Login")
         #end
     </div>
 
-    <div id="login_box">
+    <div class="login-box-container-fixed">
+        <div id="login_box">
 
         #if($data.getMessage())
-        <div class="message" style="border-bottom: 0">
-            <strong>Note: </strong> $data.getMessage()
-        </div>
+            <div class="message" style="border-bottom: 0">
+                <strong>Note: </strong> $data.getMessage()
+            </div>
 
         #end
 
-        <form name="form1" method="post" action="$content.getURI("/login")" class="noHide friendlyForm validate" id="login_form" style="min-width:358px">
-        	<div id="usernamepw_login" style="$usernamePasswordStyleStr">
-            #if($login_methods && $login_methods.size() == 0)
-                <input type="hidden" id="login_method" name="login_method" value="Database">
-            #elseif($login_methods && $login_methods.size() > 1)
-                <label for="login_method">Login</label>
-                <select id="login_method" class="xnat-menu" data-menu-opts="width:160px" name="login_method">
-                    #foreach ($method in $login_methods)
-                        <option value="$method">$method</option>
-                    #end
-                </select>
-            #end
+        <form name="form1" method="post" action="$content.getURI("/login")" class="noHide friendlyForm validate" id="login_form">
+            #showProviders($login_methods)
             <p>
                 <label for="username">User</label>
                 <input type="text"
@@ -204,27 +211,30 @@ $page.setTitle("$siteId - Please Login")
                        data-message="Password cannot be blank.">
             </p>
 
-            <p>
-                <span id="register_forgot">
-                    <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
-                    <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
-                </span>
-            </p>
-            <p class="form-submit" style="margin-top:-35px;">
-                <button class="submit btn" id="loginButton" type="submit" name="login">Login</button>
-            </p>
-
-            <input type="hidden" name="XNAT_CSRF" value="">
-            </div>
-            <!-- OPENID BEGIN -->
-            <!-- DUMP the login String: -->
-            $loginStr
-            <!-- OPENID END -->
-        </form>
+            <p class="form-submit">
+            <span id="register_forgot" style="float:left">
+                <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
+                <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
+                <a href="#" id="loginBoxMoreOptionsBtn" onclick="$('#loginBoxMoreOptions').slideToggle('fast')">More Options</a>
+            </span>
+            <button class="submit btn" id="loginButton" type="submit" name="login">Login</button>
+        </p>
+        <input type="hidden" name="XNAT_CSRF" value="">
+    </form>
     </div>
-
+    <!-- OPENID BEGIN -->
+    $loginStr
+    <!-- OPENID END -->
+    <div id="loginBoxMoreOptions">
+        <ul>
+        #foreach($screenProps in $turbineUtils.getTemplates("loginBoxMoreOptions"))
+            #set($templateFileName=$screenProps.getProperty("path"))
+            #parse("/screens/$templateFileName")
+        #end
+        </ul>
+    </div>
+    </div>
     <div class="clear"></div>
-
     #end
 </div>
 
@@ -278,10 +288,12 @@ $page.setTitle("$siteId - Please Login")
             return errorCount === 0;
 
         });
-
+        
+        if($("#loginBoxMoreOptions > ul > li").size() > 0){
+            $("#loginBoxMoreOptionsBtn").show()
+        }
     });
 
-    console.log('$!turbineUtils.escapeJS($siteConfig.passwordComplexityMessage)');
 </script>
 
 
