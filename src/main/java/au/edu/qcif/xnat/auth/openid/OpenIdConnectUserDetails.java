@@ -80,7 +80,7 @@ public class OpenIdConnectUserDetails extends XDATUser {
             usernamePattern = DEFAULT_USERNAME_PATTERN;
         }
 
-        Pattern pattern = Pattern.compile("\\[([a-zA-Z0-9]+)\\]");
+        Pattern pattern = Pattern.compile("\\[([a-zA-Z0-9_]+)\\]");
         Matcher m = pattern.matcher(usernamePattern);
 
         HashMap<String, String> pairs = new HashMap<>();
