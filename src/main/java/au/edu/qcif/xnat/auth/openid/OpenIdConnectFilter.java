@@ -208,12 +208,11 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
                         UserI adminUser = Users.getUser("admin");
                         Users.save(xdatUser, adminUser,
                                 new XdatUserAuth(user.getUsername(), XdatUserAuthService.OPENID, providerId),
-                                false, new EventDetails(EventUtils.CATEGORY.DATA,
-                                EventUtils.TYPE.WEB_SERVICE, "Added User", "Requested by user " + adminUser,
+                                false, new EventDetails(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_SERVICE,
+                                "Added User", "Requested by user " + adminUser.getUsername(),
                                 "Created new user " + user.getUsername() + " through OpenID connect."));
                     } catch (Exception ex2) {
-                        // log.warn("Ignoring exception:", ex2);
-                        log.warn("Ignoring exception: " + ex2.getMessage());
+                        log.warn("Ignoring exception:", ex2);
                     }
                 } else {
                     log.info("User {} attempted to log using authentication provider ID {}, diverting to account merge page.");
