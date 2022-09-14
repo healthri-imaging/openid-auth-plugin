@@ -25,7 +25,6 @@ import java.util.regex.Pattern;
 
 import org.apache.axis.utils.StringUtils;
 import org.nrg.xdat.security.XDATUser;
-import org.nrg.xnat.security.XnatAuthenticationFilter;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 
 import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
@@ -52,11 +51,7 @@ public class OpenIdConnectUserDetails extends XDATUser {
     private String providerId;
     private OpenIdAuthPlugin plugin;
 
-    public OpenIdConnectUserDetails(
-            String providerId,
-            Map<String, String> userInfo,
-            OAuth2AccessToken token,
-            OpenIdAuthPlugin plugin) {
+    public OpenIdConnectUserDetails(String providerId, Map<String, String> userInfo, OAuth2AccessToken token, OpenIdAuthPlugin plugin) {
         this.openIdUserInfo = userInfo;
         this.providerId = providerId;
         this.setUsername(resolvePattern(plugin.getProperty(providerId, USERNAME_PATTERN)));

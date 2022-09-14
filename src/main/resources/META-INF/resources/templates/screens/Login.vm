@@ -92,7 +92,7 @@ $page.setTitle("$siteId - Please Login")
         #end
     </div>
 
-    <div id="register_box_container" class="login-box-container-fixed">
+    <div id="register_box_container" class="login-box-container-fixed #if($siteConfig.securityLocalDbParRegistrationDisabled) hidden #end">
         <h3><span>Register A New Account</span> <button class="btn btn-sm" onclick="showLogin()">Already Have an Account?</button></h3>
         <div class="clear"></div>
         <div id="register_box">
@@ -100,8 +100,10 @@ $page.setTitle("$siteId - Please Login")
         </div>
     </div>
 
-    <div id="login_box_container" class="hidden login-box-container-fixed">
-        <h3><span>Login</span> <button class="btn btn-sm" onclick="showRegistration()">Register?</button> </h3>
+    <div id="login_box_container" class="login-box-container-fixed #if(!$siteConfig.securityLocalDbParRegistrationDisabled) hidden #end">
+        #if(!$siteConfig.securityLocalDbParRegistrationDisabled)
+            <h3><span>Login</span> <button class="btn btn-sm" onclick="showRegistration()">Register?</button> </h3>
+        #end
         <div class="clear"></div>
         <div class="message">
             <strong>Note: </strong> It looks like you received an invitation to join this site via email. Logging in here will accept that invitation and tie it with your existing $siteConfig.siteId account.
@@ -213,7 +215,9 @@ $page.setTitle("$siteId - Please Login")
 
             <p class="form-submit">
             <span id="register_forgot" style="float:left">
-                <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
+                #if(!$siteConfig.securityNewUserRegistrationDisabled)
+                    <a href="$link.setPage("Register.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Register</a>
+                #end
                 <a href="$link.setPage("ForgotLogin.vm")#if($turbineUtils.GetPassedParameter('par',$data))/par/$turbineUtils.GetPassedParameter('par',$data)#end">Forgot login or password?</a>
                 <a href="#" id="loginBoxMoreOptionsBtn" onclick="$('#loginBoxMoreOptions').slideToggle('fast')">More Options</a>
             </span>
