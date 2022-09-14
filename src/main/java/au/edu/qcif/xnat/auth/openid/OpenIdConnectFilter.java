@@ -196,7 +196,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
                 xdatUser = createUserAccount(providerId, user);
             } else {
                 // Give users an option to connect OpenID Account with an XNAT account
-                log.info("User {} attempted to log using authentication provider ID {}, diverting to account merge page.");
+                log.info("User {} attempted to log using authentication provider ID {}, diverting to account merge page.", user.getUsername(), providerId);
 
                 e = new UsernameAuthMappingNotFoundException(e.getUsername(), e.getAuthMethod(), e.getAuthMethodId(), user.getEmail(), user.getLastname(), user.getFirstname());
                 request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), e);
