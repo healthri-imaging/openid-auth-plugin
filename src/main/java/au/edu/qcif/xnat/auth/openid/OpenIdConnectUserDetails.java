@@ -20,10 +20,11 @@ package au.edu.qcif.xnat.auth.openid;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.axis.utils.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.nrg.xdat.security.XDATUser;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
 
@@ -32,70 +33,33 @@ import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
 /**
  * OIDC user details
  *
- * @author <a href='https://github.com/shilob'>Shilo Banihit</a>
+ * @author <a href="https://github.com/shilob">Shilo Banihit</a>
  */
+@SuppressWarnings({"ExternalizableWithoutPublicNoArgConstructor", "deprecation"})
 public class OpenIdConnectUserDetails extends XDATUser {
+    private static final long    serialVersionUID         = -1568972028866924986L;
+    private static final Pattern EXTRACTOR                = Pattern.compile("\\[([a-zA-Z0-9_]+)]");
+    private static final String  DEFAULT_USERNAME_PATTERN = "[providerId]_[sub]";
 
-    private static final long serialVersionUID = 1L;
-    private static final String DEFAULT_USERNAME_PATTERN = "[providerId]_[sub]";
-
-    private OAuth2AccessToken token;
-    private String email;
-    private Map<String, String> openIdUserInfo;
-    private String name;
-    private String picture;
-    private String firstName;
-    private String lastName;
-    private String pw;
-    private String username;
-    private String providerId;
-    private OpenIdAuthPlugin plugin;
+    private       OAuth2AccessToken   token;
+    private       String              email;
+    private final Map<String, String> openIdUserInfo;
+    private       String              firstName;
+    private       String              lastName;
+    private       String              username;
+    private final String              providerId;
+    private final OpenIdAuthPlugin    plugin;
 
     public OpenIdConnectUserDetails(String providerId, Map<String, String> userInfo, OAuth2AccessToken token, OpenIdAuthPlugin plugin) {
         this.openIdUserInfo = userInfo;
-        this.providerId = providerId;
+        this.providerId     = providerId;
         this.setUsername(resolvePattern(plugin.getProperty(providerId, USERNAME_PATTERN)));
-        this.token = token;
+        this.token  = token;
         this.plugin = plugin;
 
-        this.email = getUserInfo(userInfo, EMAIL, "");
-        this.setFirstname(getUserInfo(userInfo, GIVEN_NAME, ""));
-        this.setLastname(getUserInfo(userInfo, FAMILY_NAME, ""));
-        this.name = userInfo.get("name");
-        this.picture = userInfo.get("picture");
-    }
-
-    private String getUserInfo(Map<String, String> userInfo, String propName, String defaultVal) {
-        String propVal = userInfo.get(plugin.getProperty(providerId, propName));
-        return propVal != null ? propVal : defaultVal;
-    }
-
-    private String resolvePattern(String usernamePattern) {
-        if (StringUtils.isEmpty(usernamePattern)) {
-            usernamePattern = DEFAULT_USERNAME_PATTERN;
-        }
-
-        Pattern pattern = Pattern.compile("\\[([a-zA-Z0-9_]+)\\]");
-        Matcher m = pattern.matcher(usernamePattern);
-
-        HashMap<String, String> pairs = new HashMap<>();
-
-        int idx = 0;
-        while (m.find(idx)) {
-            String raw = m.group(0);
-            String variableName = m.group(1);
-
-            pairs.put(raw, variableName);
-            idx = m.end();
-        }
-
-        String converted = usernamePattern;
-        for (String key : pairs.keySet()) {
-            String fieldName = pairs.get(key);
-            String value = getFieldValue(fieldName);
-            converted = converted.replace(key, value);
-        }
-        return converted;
+        this.email = getUserInfo(userInfo, EMAIL);
+        this.setFirstname(getUserInfo(userInfo, GIVEN_NAME));
+        this.setLastname(getUserInfo(userInfo, FAMILY_NAME));
     }
 
     public String getFieldValue(String fieldName) {
@@ -111,23 +75,10 @@ public class OpenIdConnectUserDetails extends XDATUser {
         return value;
     }
 
-    public String getOpenIdUserInfo(String propName) {
-        return getOpenIdUserInfo(propName, null);
-    }
-
-    public String getOpenIdUserInfo(String propName, String defaultVal) {
-        if (openIdUserInfo == null) {
-            return defaultVal;
-        }
-
-        String propVal = openIdUserInfo.get(plugin.getProperty(providerId, propName));
-        return propVal != null ? propVal : defaultVal;
-    }
-
     public OAuth2AccessToken getToken() {
         return token;
     }
-    
+
     public void setToken(OAuth2AccessToken token) {
         this.token = token;
     }
@@ -164,4 +115,27 @@ public class OpenIdConnectUserDetails extends XDATUser {
         this.lastName = lastname;
     }
 
+    private String getUserInfo(final Map<String, String> userInfo, String propName) {
+        String propVal = userInfo.get(plugin.getProperty(providerId, propName));
+        return propVal != null ? propVal : "";
+    }
+
+    private String resolvePattern(final String usernamePattern) {
+        final String  pattern = StringUtils.defaultIfBlank(usernamePattern, DEFAULT_USERNAME_PATTERN);
+        final Matcher matcher = EXTRACTOR.matcher(pattern);
+
+        HashMap<String, String> pairs = new HashMap<>();
+
+        final AtomicInteger index = new AtomicInteger();
+        while (matcher.find(index.get())) {
+            pairs.put(matcher.group(0), matcher.group(1));
+            index.set(matcher.end());
+        }
+
+        String converted = pattern;
+        for (final String key : pairs.keySet()) {
+            converted = converted.replace(key, getFieldValue(pairs.get(key)));
+        }
+        return converted;
+    }
 }

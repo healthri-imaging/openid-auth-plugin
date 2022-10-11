@@ -11,10 +11,7 @@ package au.edu.qcif.xnat.auth.openid.provider;
 
 import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
-import org.nrg.xnat.security.provider.AuthenticationProviderConfigurationLocator;
-import org.nrg.xnat.security.provider.ProviderAttributes;
-import org.nrg.xnat.security.provider.XnatAuthenticationProvider;
-import org.nrg.xnat.security.provider.XnatMulticonfigAuthenticationProvider;
+import org.nrg.xnat.security.provider.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
@@ -32,32 +29,30 @@ import static org.nrg.xdat.services.XdatUserAuthService.OPENID;
  */
 @Component
 @Slf4j
-public class XnatMulticonfigOpenIdAuthenticationProvider implements XnatMulticonfigAuthenticationProvider {
-    private final Map<String, ProviderAttributes> _providerAttributes = new HashMap<>();
-    private final Map<String, XnatOpenIdAuthenticationProvider> _providers = new HashMap<>();
+public class XnatMulticonfigOpenIdAuthenticationProvider extends AbstractBaseXnatMulticonfigAuthenticationProvider {
+    private final Map<String, ProviderAttributes>               _providerAttributes = new HashMap<>();
+    private final Map<String, XnatOpenIdAuthenticationProvider> _providers          = new HashMap<>();
 
     @Autowired
-    public XnatMulticonfigOpenIdAuthenticationProvider(
-            final AuthenticationProviderConfigurationLocator locator
-    ) {
-        this(locator.getProviderDefinitionsByAuthMethod(OPENID));
+    public XnatMulticonfigOpenIdAuthenticationProvider(final AuthenticationProviderConfigurationLocator locator) {
+        super(locator, OPENID);
     }
 
-    public XnatMulticonfigOpenIdAuthenticationProvider(
-            final Map<String, ProviderAttributes> definitions) {
-        if (!CollectionUtils.isEmpty(definitions)) {
-            new LinkedList<>(definitions.keySet()).stream().map(definitions::get).forEach(attributes -> {
-                final String providerId = attributes.getProviderId();
-                _providerAttributes.put(providerId, attributes);
-                _providers.put(providerId, new XnatOpenIdAuthenticationProvider(attributes));
-                String[] openIdProviderIds = attributes.getProperty("enabled").split("\\s*,\\s*");
-                Arrays.stream(openIdProviderIds).forEach(openIdProviderId -> {
-                    XnatOpenIdAuthenticationProvider provider = new XnatOpenIdAuthenticationProvider(openIdProviderId, attributes);
-                    _providers.put(openIdProviderId, provider);
-                });
-
-            });
+    public XnatMulticonfigOpenIdAuthenticationProvider(final Map<String, ProviderAttributes> definitions) {
+        super(definitions);
+        if (CollectionUtils.isEmpty(definitions)) {
+            return;
         }
+        new LinkedList<>(definitions.keySet()).stream()
+                                              .map(definitions::get)
+                                              .forEach(attributes -> Arrays.stream(attributes.getProperty("enabled").split("\\s*,\\s*"))
+                                                                           .filter(openIdProviderId -> !_providers.containsKey(openIdProviderId))
+                                                                           .forEach(openIdProviderId -> _providers.put(openIdProviderId, new XnatOpenIdAuthenticationProvider(openIdProviderId, attributes))));
+    }
+
+    @Override
+    protected XnatAuthenticationProvider createAuthenticationProvider(final ProviderAttributes attributes) {
+        return new XnatOpenIdAuthenticationProvider(attributes);
     }
 
     /**
@@ -117,7 +112,7 @@ public class XnatMulticonfigOpenIdAuthenticationProvider implements XnatMulticon
     @Override
     public String toString() {
         return _providers.values().stream()
-                .map(XnatOpenIdAuthenticationProvider::getName)
-                .collect(Collectors.joining(", "));
+                         .map(XnatOpenIdAuthenticationProvider::getName)
+                         .collect(Collectors.joining(", "));
     }
 }

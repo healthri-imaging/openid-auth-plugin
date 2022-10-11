@@ -1,39 +1,29 @@
 package au.edu.qcif.xnat.auth.openid.provider;
 
 import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthRequestToken;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xdat.services.XdatUserAuthService;
+import org.nrg.xnat.security.provider.AbstractBaseXnatAuthenticationProvider;
 import org.nrg.xnat.security.provider.ProviderAttributes;
-import org.nrg.xnat.security.provider.XnatAuthenticationProvider;
 import org.nrg.xnat.security.tokens.XnatAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 
+@Getter
+@Setter
+@Accessors(prefix = "_")
 @Slf4j
-public class XnatOpenIdAuthenticationProvider implements XnatAuthenticationProvider {
-    public XnatOpenIdAuthenticationProvider(
-            final ProviderAttributes attributes
-    ) {
-        setProviderId(attributes.getProviderId());
-        setName(attributes.getName());
+public class XnatOpenIdAuthenticationProvider extends AbstractBaseXnatAuthenticationProvider {
+    public XnatOpenIdAuthenticationProvider(final ProviderAttributes attributes) {
+        super(attributes);
     }
 
-    public XnatOpenIdAuthenticationProvider(
-            final String providerId,
-            final ProviderAttributes attributes
-    ) {
-        setProviderId(providerId);
-        setName(attributes.getName());
-    }
-
-    @Override
-    public String getProviderId() {
-        return _providerId;
-    }
-
-    public void setProviderId(final String providerId) {
-        _providerId = providerId;
+    public XnatOpenIdAuthenticationProvider(final String providerId, final ProviderAttributes attributes) {
+        super(providerId, attributes);
     }
 
     @Override
@@ -42,66 +32,25 @@ public class XnatOpenIdAuthenticationProvider implements XnatAuthenticationProvi
     }
 
     @Override
-    public String getName() {
-        return _displayName;
-    }
-
-    public void setName(final String newName) {
-        _displayName = newName;
-    }
-
-    @Override
     public boolean isVisible() {
-        return _visible;
+        return false;
     }
 
     @Override
     public void setVisible(final boolean visible) {
+        log.info("Can't set OpenID providers to visible");
     }
 
     @Override
-    public boolean isAutoEnabled() {
-        return _autoEnabled;
-    }
-
-    @Override
-    public void setAutoEnabled(final boolean autoEnabled) {
-        _autoEnabled = autoEnabled;
-    }
-
-    @Override
-    public boolean isAutoVerified() {
-        return _autoVerified;
-    }
-
-    @Override
-    public void setAutoVerified(final boolean autoVerified) {
-        _autoVerified = autoVerified;
-    }
-
-    @Deprecated
-    @Override
-    public int getOrder() {
-        log.info("The order property is deprecated and will be removed in a future version of XNAT.");
-        return 0;
-    }
-
-    @Deprecated
-    @Override
-    public void setOrder(int order) {
-        log.info("The order property is deprecated and will be removed in a future version of XNAT.");
-    }
-
-    @Override
-    public XnatAuthenticationToken createToken(String username, String password) {
+    public XnatAuthenticationToken createToken(final String username, final String password) {
         return new OpenIdAuthRequestToken(username, getProviderId());
     }
 
     @Override
-    public boolean supports(Authentication authentication) {
+    public boolean supports(final Authentication authentication) {
         return supports(authentication.getClass()) &&
-                authentication instanceof OpenIdAuthRequestToken &&
-                StringUtils.equals(getProviderId(), ((OpenIdAuthRequestToken) authentication).getProviderId());
+               authentication instanceof OpenIdAuthRequestToken &&
+               StringUtils.equals(getProviderId(), ((OpenIdAuthRequestToken) authentication).getProviderId());
     }
 
     @Override
@@ -111,14 +60,7 @@ public class XnatOpenIdAuthenticationProvider implements XnatAuthenticationProvi
     }
 
     @Override
-    public boolean supports(Class<?> authentication) {
+    public boolean supports(final Class<?> authentication) {
         return false;
     }
-
-    private String _displayName = "";
-    private String _providerId = "";
-    //This plugin should be invisible so that the user only can login via OAuth process.
-    boolean _visible = false;
-    private boolean _autoEnabled;
-    private boolean _autoVerified;
 }

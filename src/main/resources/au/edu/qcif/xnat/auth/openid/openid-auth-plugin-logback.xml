@@ -20,4 +20,7 @@
     <logger name="au.edu.qcif.xnat.auth.openid" additivity="false" level="INFO">
         <appender-ref ref="openid"/>
     </logger>
+    <logger name="au.edu.qcif.xnat.auth.openid.OpenIdAuthPlugin" additivity="false" level="DEBUG">
+        <appender-ref ref="openid"/>
+    </logger>
 </configuration>

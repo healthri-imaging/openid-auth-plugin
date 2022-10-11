@@ -24,7 +24,7 @@ import org.springframework.security.core.SpringSecurityCoreVersion;
 /**
  * Plugin's XNAT Auth token
  * 
- * @author <a href='https://github.com/shilob'>Shilo Banihit</a>
+ * @author <a href="https://github.com/shilob">Shilo Banihit</a>
  * 
  */
 public class OpenIdAuthToken extends AbstractXnatAuthenticationToken {
