@@ -22,10 +22,6 @@ public class XnatOpenIdAuthenticationProvider extends AbstractBaseXnatAuthentica
         super(attributes);
     }
 
-    public XnatOpenIdAuthenticationProvider(final String providerId, final ProviderAttributes attributes) {
-        super(providerId, attributes);
-    }
-
     @Override
     public String getAuthMethod() {
         return XdatUserAuthService.OPENID;
