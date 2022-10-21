@@ -9,18 +9,15 @@
 
 package au.edu.qcif.xnat.auth.openid.provider;
 
-import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
+import org.nrg.xnat.security.provider.AbstractBaseXnatMulticonfigAuthenticationProvider;
 import org.nrg.xnat.security.provider.AuthenticationProviderConfigurationLocator;
 import org.nrg.xnat.security.provider.ProviderAttributes;
 import org.nrg.xnat.security.provider.XnatAuthenticationProvider;
-import org.nrg.xnat.security.provider.XnatMulticonfigAuthenticationProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.util.CollectionUtils;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 import static org.nrg.xdat.services.XdatUserAuthService.OPENID;
 
@@ -32,92 +29,18 @@ import static org.nrg.xdat.services.XdatUserAuthService.OPENID;
  */
 @Component
 @Slf4j
-public class XnatMulticonfigOpenIdAuthenticationProvider implements XnatMulticonfigAuthenticationProvider {
-    private final Map<String, ProviderAttributes> _providerAttributes = new HashMap<>();
-    private final Map<String, XnatOpenIdAuthenticationProvider> _providers = new HashMap<>();
-
+public class XnatMulticonfigOpenIdAuthenticationProvider extends AbstractBaseXnatMulticonfigAuthenticationProvider {
     @Autowired
-    public XnatMulticonfigOpenIdAuthenticationProvider(
-            final AuthenticationProviderConfigurationLocator locator
-    ) {
-        this(locator.getProviderDefinitionsByAuthMethod(OPENID));
+    public XnatMulticonfigOpenIdAuthenticationProvider(final AuthenticationProviderConfigurationLocator locator) {
+        super(locator, OPENID);
     }
 
-    public XnatMulticonfigOpenIdAuthenticationProvider(
-            final Map<String, ProviderAttributes> definitions) {
-        if (!CollectionUtils.isEmpty(definitions)) {
-            new LinkedList<>(definitions.keySet()).stream().map(definitions::get).forEach(attributes -> {
-                final String providerId = attributes.getProviderId();
-                _providerAttributes.put(providerId, attributes);
-                _providers.put(providerId, new XnatOpenIdAuthenticationProvider(attributes));
-                String[] openIdProviderIds = attributes.getProperty("enabled").split("\\s*,\\s*");
-                Arrays.stream(openIdProviderIds).forEach(openIdProviderId -> {
-                    XnatOpenIdAuthenticationProvider provider = new XnatOpenIdAuthenticationProvider(openIdProviderId, attributes);
-                    _providers.put(openIdProviderId, provider);
-                });
-
-            });
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public List<String> getProviderIds() {
-        return ImmutableList.copyOf(_providerAttributes.keySet());
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public List<XnatAuthenticationProvider> getProviders() {
-        return new ArrayList<>(_providers.values());
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public XnatAuthenticationProvider getProvider(final String providerId) {
-        return _providers.get(providerId);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public String getName(final String providerId) {
-        final XnatAuthenticationProvider provider = getProvider(providerId);
-        return provider != null ? provider.getName() : null;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean isVisible(final String providerId) {
-        final XnatAuthenticationProvider provider = getProvider(providerId);
-        return provider != null && provider.isVisible();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void setVisible(final String providerId, final boolean visible) {
-        final XnatAuthenticationProvider provider = getProvider(providerId);
-        if (provider != null) {
-            provider.setVisible(visible);
-            _providerAttributes.get(providerId).setVisible(visible);
-        }
+    public XnatMulticonfigOpenIdAuthenticationProvider(final Map<String, ProviderAttributes> definitions) {
+        super(definitions);
     }
 
     @Override
-    public String toString() {
-        return _providers.values().stream()
-                .map(XnatOpenIdAuthenticationProvider::getName)
-                .collect(Collectors.joining(", "));
+    protected XnatAuthenticationProvider createAuthenticationProvider(final ProviderAttributes attributes) {
+        return new XnatOpenIdAuthenticationProvider(attributes);
     }
 }

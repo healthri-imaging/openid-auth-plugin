@@ -17,88 +17,90 @@
  */
 package au.edu.qcif.xnat.auth.openid;
 
-import java.io.IOException;
-import java.util.Calendar;
-import java.util.Map;
-import java.util.TimeZone;
-
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
-
 import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthRequestToken;
+import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthToken;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections.ListUtils;
 import org.apache.commons.lang3.StringUtils;
-
-import org.nrg.xdat.XDAT;
+import org.nrg.framework.generics.GenericUtils;
 import org.nrg.xdat.entities.XdatUserAuth;
 import org.nrg.xdat.exceptions.UsernameAuthMappingNotFoundException;
-import org.nrg.xdat.om.XdatUserLogin;
 import org.nrg.xdat.preferences.SiteConfigPreferences;
 import org.nrg.xdat.security.helpers.UserHelper;
 import org.nrg.xdat.security.helpers.Users;
 import org.nrg.xdat.services.XdatUserAuthService;
 import org.nrg.xdat.turbine.utils.AccessLogger;
 import org.nrg.xdat.turbine.utils.TurbineUtils;
-import org.nrg.xft.XFTItem;
 import org.nrg.xft.event.EventDetails;
 import org.nrg.xft.event.EventUtils;
 import org.nrg.xft.security.UserI;
-import org.nrg.xft.utils.SaveItemHelper;
 import org.nrg.xnat.security.exceptions.NewAutoAccountNotAutoEnabledException;
-import org.springframework.http.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.security.authentication.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AuthenticationEventPublisher;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.jwt.Jwt;
 import org.springframework.security.jwt.JwtHelper;
 import org.springframework.security.oauth2.client.OAuth2RestTemplate;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
-import org.springframework.security.oauth2.common.exceptions.InvalidTokenException;
 import org.springframework.security.oauth2.common.exceptions.OAuth2Exception;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableOAuth2Client;
 import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import au.edu.qcif.xnat.auth.openid.tokens.OpenIdAuthToken;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 
-import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Main Spring Security authentication filter.
  *
- * @author <a href='https://github.com/shilob'>Shilo Banihit</a>
+ * @author <a href="https://github.com/shilob">Shilo Banihit</a>
  */
+@SuppressWarnings("deprecation")
 @EnableOAuth2Client
 @Slf4j
 public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter {
-    private static final String USER_XDAT_USER_ID = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".user_xdat_user_id";
-    private static final String LOGIN_DATE        = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".login_date";
-    private static final String IP_ADDRESS        = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".ip_address";
-    private static final String SESSION_ID        = XdatUserLogin.SCHEMA_ELEMENT_NAME + ".session_id";
+    private static final List<String> ALL_DOMAINS = Collections.singletonList("*");
 
-    private OpenIdAuthPlugin plugin;
-    private AuthenticationEventPublisher eventPublisher;
-    private XdatUserAuthService userAuthService;
-    private String[] allowedDomains;
+    private final OpenIdAuthPlugin             _plugin;
+    private final AuthenticationEventPublisher _eventPublisher;
+    private final XdatUserAuthService          _userAuthService;
+    private final SiteConfigPreferences        _siteConfigPreferences;
+    private final Map<String, List<String>>    _allowedDomains;
+    private final ObjectMapper                 _objectMapper;
 
-    @Autowired
-    @Qualifier("createRestTemplate")
-    private OAuth2RestTemplate restTemplate;
+    private OAuth2RestTemplate _restTemplate;
 
-    public OpenIdConnectFilter(String defaultFilterProcessesUrl, OpenIdAuthPlugin plugin, AuthenticationEventPublisher eventPublisher, XdatUserAuthService userAuthService) {
+    public OpenIdConnectFilter(final String defaultFilterProcessesUrl, final OpenIdAuthPlugin plugin, final AuthenticationEventPublisher eventPublisher, final XdatUserAuthService userAuthService, final SiteConfigPreferences siteConfigPreferences) {
         super(defaultFilterProcessesUrl);
-        log.debug("Created filter for " + defaultFilterProcessesUrl);
+        log.debug("Creating filter for URL {}", defaultFilterProcessesUrl);
         setAuthenticationManager(new NoopAuthenticationManager());
-        this.plugin = plugin;
-        this.eventPublisher = eventPublisher;
-        this.userAuthService = userAuthService;
+        _plugin                = plugin;
+        _eventPublisher        = eventPublisher;
+        _userAuthService       = userAuthService;
+        _siteConfigPreferences = siteConfigPreferences;
+
+        _allowedDomains = _plugin.getEnabledProviders().stream().collect(Collectors.toMap(Function.identity(), this::getAllowedEmailDomains));
+        // TODO: This should be initialized from or replaced by the SerializerService instance
+        _objectMapper = new ObjectMapper();
     }
 
     @Autowired
@@ -119,6 +121,11 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         super.setSessionAuthenticationStrategy(strategy);
     }
 
+    @Autowired
+    public void setOAuth2RestTemplate(final OAuth2RestTemplate restTemplate) {
+        _restTemplate = restTemplate;
+    }
+
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException, IOException {
         log.debug("Executed attemptAuthentication...");
@@ -136,7 +143,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         OAuth2AccessToken accessToken;
         try {
             log.debug("Getting access token...");
-            accessToken = restTemplate.getAccessToken();
+            accessToken = _restTemplate.getAccessToken();
             log.debug("Got access token!!! {}", accessToken);
         } catch (final OAuth2Exception e) {
             log.debug("Could not obtain access token", e);
@@ -152,64 +159,56 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         String providerId = (String) request.getSession().getAttribute("providerId");
 
         log.debug("Getting idToken...");
-        final String idToken = accessToken.getAdditionalInformation().get("id_token").toString();
-        final Jwt tokenDecoded = JwtHelper.decode(idToken);
+        final String idToken      = accessToken.getAdditionalInformation().get("id_token").toString();
+        final Jwt    tokenDecoded = JwtHelper.decode(idToken);
 
-        log.debug("===== : " + tokenDecoded.getClaims());
-        final Map<String, String> authInfo = new ObjectMapper().readValue(tokenDecoded.getClaims(), Map.class);
+        log.debug("===== : {}", tokenDecoded.getClaims());
+        final Map<String, String> authInfo = GenericUtils.convertToTypedMap(_objectMapper.readValue(tokenDecoded.getClaims(), Map.class), String.class, String.class);
 
-        String userInfoUri = plugin.getProperty(providerId, "userInfoUri");
+        final String userInfoUri = _plugin.getProperty(providerId, "userInfoUri");
         if (!StringUtils.isEmpty(userInfoUri)) {
             Map<String, String> userInfo = getUserInfo(accessToken.getValue(), userInfoUri);
             authInfo.putAll(userInfo);
         }
 
-        final OpenIdConnectUserDetails user = new OpenIdConnectUserDetails(providerId, authInfo, accessToken, plugin);
+        final OpenIdConnectUserDetails user = new OpenIdConnectUserDetails(providerId, authInfo, accessToken, _plugin);
 
         if (shouldFilterEmailDomains(providerId) && !isAllowedEmailDomain(user.getEmail(), providerId)) {
-            log.error("Domain not allowed: " + user.getEmail());
-
-            throw (AuthenticationException) (new NewAutoAccountNotAutoEnabledException(
-                    "New OpenID user, not on the domain whitelist.", user));
+            throw new NewAutoAccountNotAutoEnabledException("New OpenID user, email is not on the domain whitelist.", user);
         }
-        if (!plugin.isEnabled(providerId)) {
-            log.error("Provider is disabled.");
-            throw (AuthenticationException) (new NewAutoAccountNotAutoEnabledException(
-                    "OpenID user is not on the enabled list.", user));
+        if (!_plugin.isEnabled(providerId)) {
+            throw new NewAutoAccountNotAutoEnabledException("OpenID provider is not enabled", user);
         }
 
         log.debug("Checking if user exists...");
-        UserI xdatUser = null;
+        UserI  xdatUser;
         String requesterUsername = null;
         try {
             requesterUsername = user.getUsername();
-            xdatUser = userAuthService.getUserDetailsByNameAndAuth(requesterUsername, XdatUserAuthService.OPENID, providerId);
+            xdatUser          = _userAuthService.getUserDetailsByNameAndAuth(requesterUsername, XdatUserAuthService.OPENID, providerId);
             if (!xdatUser.isEnabled()) {
-                throw new NewAutoAccountNotAutoEnabledException(
-                        "New OpenID user, needs to to be enabled.", xdatUser);
+                throw new NewAutoAccountNotAutoEnabledException("New OpenID user, needs to to be enabled.", xdatUser);
             }
             if ((getSiteConfigPreferences().getEmailVerification() && !xdatUser.isVerified()) || !xdatUser.isAccountNonLocked()) {
                 throw new CredentialsExpiredException("Attempted login to unverified or locked account: " + xdatUser.getUsername());
             }
         } catch (UsernameAuthMappingNotFoundException e) {
-            if (Boolean.parseBoolean(plugin.getProperty(providerId, "forceUserCreate"))) {
+            if (Boolean.parseBoolean(_plugin.getProperty(providerId, "forceUserCreate"))) {
                 xdatUser = createUserAccount(providerId, user);
             } else {
                 // Give users an option to connect OpenID Account with an XNAT account
                 log.info("User {} attempted to log using authentication provider ID {}, diverting to account merge page.", user.getUsername(), providerId);
-
-                e = new UsernameAuthMappingNotFoundException(e.getUsername(), e.getAuthMethod(), e.getAuthMethodId(), user.getEmail(), user.getLastname(), user.getFirstname());
-                request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), e);
+                request.getSession().setAttribute(UsernameAuthMappingNotFoundException.class.getSimpleName(), new UsernameAuthMappingNotFoundException(e.getUsername(), e.getAuthMethod(), e.getAuthMethodId(), user.getEmail(), user.getLastname(), user.getFirstname()));
                 response.sendRedirect(TurbineUtils.GetFullServerPath() + "/app/template/RegisterExternalLogin.vm");
                 return null;
             }
         }
 
-        if (requesterUsername != null && xdatUser != null) {
+        if (requesterUsername != null) {
             Authentication authentication = new OpenIdAuthToken(xdatUser, providerId);
 
             Authentication authRequestToken = new OpenIdAuthRequestToken(requesterUsername, providerId);
-            eventPublisher.publishAuthenticationSuccess(authRequestToken);
+            _eventPublisher.publishAuthenticationSuccess(authRequestToken);
 
             org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(authRequestToken);
             AccessLogger.LogServiceAccess(xdatUser.getUsername(), request, "Authentication", "SUCCESS");
@@ -221,8 +220,8 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
     }
 
     private UserI createUserAccount(final String providerId, final OpenIdConnectUserDetails user) throws AuthenticationException {
-        String userAutoEnabled = plugin.getProperty(providerId, "userAutoEnabled");
-        String userAutoVerified = plugin.getProperty(providerId, "userAutoVerified");
+        String userAutoEnabled  = _plugin.getProperty(providerId, "userAutoEnabled");
+        String userAutoVerified = _plugin.getProperty(providerId, "userAutoVerified");
 
         UserI xdatUser = Users.createUser();
         xdatUser.setLogin(user.getUsername());
@@ -232,51 +231,67 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         xdatUser.setEnabled(userAutoEnabled);
         xdatUser.setVerified(userAutoVerified);
 
-        log.info("Create user, username: " + xdatUser.getUsername());
+        log.info("Create user, username: {}", xdatUser.getUsername());
         try {
             UserI adminUser = Users.getAdminUser();
             Users.save(xdatUser, adminUser,
-                    new XdatUserAuth(user.getUsername(), XdatUserAuthService.OPENID, providerId),
-                    false, new EventDetails(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_SERVICE,
-                            "Added User", "Requested by user " + adminUser.getUsername(),
-                            "Created new user " + user.getUsername() + " through OpenID connect."));
+                       new XdatUserAuth(user.getUsername(), XdatUserAuthService.OPENID, providerId),
+                       false, new EventDetails(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_SERVICE,
+                                               "Added User", "Requested by user " + adminUser.getUsername(),
+                                               "Created new user " + user.getUsername() + " through OpenID connect."));
         } catch (Exception ex2) {
             log.warn("Ignoring exception:", ex2);
         }
         return xdatUser;
     }
 
-    private boolean isAllowedEmailDomain(String email, String providerId) {
-        if (allowedDomains == null) {
-            allowedDomains = plugin.getProperty(providerId, "allowedEmailDomains").split(",");
+    private boolean shouldFilterEmailDomains(final String providerId) {
+        return Boolean.parseBoolean(StringUtils.defaultIfBlank(_plugin.getProperty(providerId, "shouldFilterEmailDomains"), "false"));
+    }
+
+    private List<String> getAllowedEmailDomains(final String providerId) {
+        return shouldFilterEmailDomains(providerId)
+               ? Arrays.stream(_plugin.getProperty(providerId, "allowedEmailDomains").split("\\s*,\\s*"))
+                       .map(StringUtils::lowerCase)
+                       .collect(Collectors.toList())
+               : ALL_DOMAINS;
+    }
+
+    private boolean isAllowedEmailDomain(final String email, final String providerId) {
+        if (!_allowedDomains.containsKey(providerId)) {
+            return false;
         }
-        String[] emailParts = email.split("@");
-        String domain = emailParts.length >= 2 ? emailParts[1] : null;
-        for (String allowedDomain : allowedDomains) {
-            if (allowedDomain.equalsIgnoreCase(domain)) {
-                log.debug("Matched email {} with allowed domain {} for provider {}", email, allowedDomains, providerId);
-                return true;
-            }
+        if (!shouldFilterEmailDomains(providerId)) {
+            return true;
         }
-        log.debug("Email {} did not match any allowed domains for provider {}: {}", email, providerId, StringUtils.join(allowedDomains, ", "));
+        final List<String> allowedDomains = _allowedDomains.get(providerId);
+        if (ListUtils.isEqualList(ALL_DOMAINS, allowedDomains)) {
+            return true;
+        }
+        final String[] emailParts = email.split("@");
+        final String   domain     = emailParts.length >= 2 ? emailParts[1] : null;
+        if (StringUtils.isBlank(domain)) {
+            log.warn("Couldn't parse a domain from the email address {}, returning false", email);
+            return false;
+        }
+        if (allowedDomains.contains(StringUtils.lowerCase(domain))) {
+            log.debug("Matched email {} with allowed domain {} for provider {}", email, _allowedDomains, providerId);
+            return true;
+        }
+        log.debug("Email {} did not match any allowed domains for provider {}: {}", email, providerId, StringUtils.join(_allowedDomains, ", "));
         return false;
     }
 
     protected SiteConfigPreferences getSiteConfigPreferences() {
-        return XDAT.getSiteConfigPreferences();
-    }
-
-    private boolean shouldFilterEmailDomains(String providerId) {
-        return Boolean.parseBoolean(plugin.getProperty(providerId, "shouldFilterEmailDomains"));
+        return _siteConfigPreferences;
     }
 
     private Map<String, String> getUserInfo(final String accessToken, final String userInfoEndpoint) {
         // See https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
-        HttpHeaders headers = new HttpHeaders();
+        final HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + accessToken);
-        HttpEntity<?> requestEntity = new HttpEntity<>(headers);
-        return restTemplate.exchange(userInfoEndpoint, HttpMethod.GET, requestEntity, Map.class).getBody();
+        headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
+        return GenericUtils.convertToTypedMap(_restTemplate.exchange(userInfoEndpoint, HttpMethod.GET, new HttpEntity<>(headers), Map.class).getBody(), String.class, String.class);
     }
 
     private static class NoopAuthenticationManager implements AuthenticationManager {

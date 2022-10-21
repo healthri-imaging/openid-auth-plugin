@@ -18,6 +18,7 @@
 package au.edu.qcif.xnat.auth.openid;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -25,8 +26,9 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.framework.annotations.XnatPlugin;
+import org.nrg.xdat.preferences.SiteConfigPreferences;
 import org.nrg.xdat.services.XdatUserAuthService;
-import org.nrg.xnat.security.XnatSecurityExtension;
+import org.nrg.xnat.security.BaseXnatSecurityExtension;
 import org.nrg.xnat.security.provider.AuthenticationProviderConfigurationLocator;
 import org.nrg.xnat.security.provider.ProviderAttributes;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +37,6 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Scope;
 import org.springframework.context.annotation.ScopedProxyMode;
 import org.springframework.security.authentication.AuthenticationEventPublisher;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.client.OAuth2ClientContext;
@@ -59,195 +60,139 @@ import au.edu.qcif.xnat.auth.openid.pkce.PkceAuthorizationCodeResourceDetails;
 import lombok.extern.slf4j.Slf4j;
 
 import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.PKCE_ENABLED;
+import static org.nrg.xdat.services.XdatUserAuthService.OPENID;
 
 /**
  * XNAT Authentication plugin.
  *
- * @author <a href='https://github.com/shilob'>Shilo Banihit</a>
+ * @author <a href="https://github.com/shilob">Shilo Banihit</a>
  */
+@SuppressWarnings("deprecation")
 @XnatPlugin(value = "openIdAuthPlugin", name = "XNAT OpenID Authentication Provider Plugin", logConfigurationFile = "au/edu/qcif/xnat/auth/openid/openid-auth-plugin-logback.xml")
 @EnableWebSecurity
 @EnableOAuth2Client
 @Component
 @ComponentScan("au.edu.qcif.xnat.auth.openid.provider")
 @Slf4j
-public class OpenIdAuthPlugin implements XnatSecurityExtension {
-    private static final String _id = "openid";
-    private static final AccessTokenProvider accessTokenProviderChain = new AccessTokenProviderChain(
+public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
+    private static final AccessTokenProvider ACCESS_TOKEN_PROVIDER_CHAIN = new AccessTokenProviderChain(
             Arrays.<AccessTokenProvider>asList(new PkceAuthorizationCodeAccessTokenProvider(),
-                    new ImplicitAccessTokenProvider(),
-                    new ResourceOwnerPasswordAccessTokenProvider(),
-                    new ClientCredentialsAccessTokenProvider()));
-    private static OpenIdAuthPlugin _inst;
+                                               new ImplicitAccessTokenProvider(),
+                                               new ResourceOwnerPasswordAccessTokenProvider(),
+                                               new ClientCredentialsAccessTokenProvider()));
+
+    private final AuthenticationEventPublisher               _eventPublisher;
+    private final XdatUserAuthService                        _userAuthService;
+    private final AuthenticationProviderConfigurationLocator _locator;
+    private final SiteConfigPreferences                      _siteConfigPreferences;
+    private final Properties                                 _props;
+    private final List<String>                               _enabledProviders;
 
     @Autowired
-    public OpenIdAuthPlugin(AuthenticationEventPublisher eventPublisher, XdatUserAuthService userAuthService) {
-        this._eventPublisher = eventPublisher;
-        this._userAuthService = userAuthService;
+    public OpenIdAuthPlugin(final AuthenticationEventPublisher eventPublisher, final XdatUserAuthService userAuthService, final AuthenticationProviderConfigurationLocator locator, final SiteConfigPreferences siteConfigPreferences) {
+        _eventPublisher        = eventPublisher;
+        _userAuthService       = userAuthService;
+        _locator               = locator;
+        _siteConfigPreferences = siteConfigPreferences;
+        _props                 = loadProps();
+        _enabledProviders      = Arrays.asList(_props.getProperty("enabled").split(","));
     }
 
-    @Autowired
-    public void setAuthenticationProviderConfigurationLocator(final AuthenticationProviderConfigurationLocator locator) {
-        _locator = locator;
-        loadProps();
-    }
-
-    public boolean isEnabled(String providerId) {
-        getEnabledProviders();
-        for (String provider : _enabledProviders) {
-            if (provider.equals(providerId)) {
-                return true;
-            }
-        }
-        return false;
+    public boolean isEnabled(final String providerId) {
+        return _enabledProviders.contains(providerId);
     }
 
     public String getProperty(String providerId, String propName) {
-        loadProps();
-        return _props.getProperty(_id + "." + providerId + "." + propName);
-    }
-
-    private void loadProps() {
-        if (_props == null && _locator != null && !skipOpenID) {
-            final Map<String, ProviderAttributes> openIdProviders = _locator.getProviderDefinitionsByAuthMethod("openid");
-            if (openIdProviders.size() == 0) {
-                skipOpenID = true;
-                log.error("",new RuntimeException("You must configure an OpenID provider"));
-                return;
-            }
-            if (openIdProviders.size() > 1) {
-                skipOpenID = true;
-                log.error("",new RuntimeException(
-                        "This plugin currently only supports one OpenID provider at a time, but I found "
-                                + openIdProviders.size() + " providers defined: "
-                                + StringUtils.join(openIdProviders.keySet(), ", ")));
-                return;
-            }
-            final ProviderAttributes providerDefinition = _locator.getProviderDefinition(openIdProviders.keySet().iterator().next());
-            _props = providerDefinition != null ? providerDefinition.getProperties() : new Properties();
-            _inst = this;
-        }
+        return _props.getProperty(String.join(".", OPENID, providerId, propName));
     }
 
     public Properties getProps() {
         return _props;
     }
 
-    public String[] getEnabledProviders() {
-        if (_enabledProviders == null) {
-            _enabledProviders = _props.getProperty("enabled").split(",");
-        }
+    public List<String> getEnabledProviders() {
         return _enabledProviders;
     }
 
     @Bean
     @Scope("prototype")
     public OpenIdConnectFilter createFilter() {
-        return new OpenIdConnectFilter(getProps().getProperty("preEstablishedRedirUri"), this, _eventPublisher, _userAuthService);
+        return new OpenIdConnectFilter(getProps().getProperty("preEstablishedRedirUri"), this, _eventPublisher, _userAuthService, _siteConfigPreferences);
     }
 
     @Override
-    public void configure(final HttpSecurity http) throws Exception {
-        this.http = http;
+    public void configure(final HttpSecurity http) {
         try {
-            if (!skipOpenID) {
+            if (!_props.isEmpty()) {
                 http.addFilterAfter(new OAuth2ClientContextFilter(), AbstractPreAuthenticatedProcessingFilter.class)
-                        .addFilterAfter(createFilter(), OAuth2ClientContextFilter.class);
+                    .addFilterAfter(createFilter(), OAuth2ClientContextFilter.class);
             }
         } catch (Throwable e) {
-            log.error("", e);
-            if (!skipOpenID) {
-                throw e;
-            }
+            log.error("An error occurred trying to create and/or configure the OAuth2ClientContextFilter and OpenIdConnectFilter", e);
         }
-    }
-
-    private boolean isPkceEnabled(String providerId) {
-        String pkceEnabled = getProperty(providerId, PKCE_ENABLED);
-        if (pkceEnabled != null) {
-            pkceEnabled = pkceEnabled.trim();
-        }
-        log.debug("Is PKCE Enabled: " + pkceEnabled + "(" + Boolean.parseBoolean(pkceEnabled) + ")");
-        return Boolean.parseBoolean(pkceEnabled);
-    }
-
-    private AuthenticationProviderConfigurationLocator _locator;
-    private AuthenticationEventPublisher _eventPublisher;
-    private XdatUserAuthService _userAuthService;
-    private Properties _props;
-    private String[] _enabledProviders;
-    private boolean isFilterConfigured = false;
-    private HttpSecurity http;
-    private boolean skipOpenID = false;
-
-    public static Properties getConfig() {
-        return _inst.getProps();
-    }
-
-    public static String getLoginStr() {
-        String[] enabledProviders = _inst.getEnabledProviders();
-        String loginStr = "";
-        int idx = 0;
-        for (String enabledProvider : enabledProviders) {
-            loginStr = loginStr + _inst.getProperty(enabledProvider, "link");
-        }
-        return loginStr;
-    }
-
-    public static String getUsernamePasswordStyle() {
-        _inst.loadProps();
-        boolean disableUsernamePassword = Boolean
-                .parseBoolean(_inst.getProps().getProperty("disableUsernamePasswordLogin"));
-        if (disableUsernamePassword) {
-            return "display:none";
-        } else {
-            return "";
-        }
-    }
-
-    @Override
-    public void configure(final AuthenticationManagerBuilder builder) throws Exception {
-
     }
 
     public String getAuthMethod() {
-        return _id;
+        return OPENID;
     }
 
     @Bean
     @Scope(value = WebApplicationContext.SCOPE_SESSION, proxyMode = ScopedProxyMode.TARGET_CLASS)
-    public OAuth2RestTemplate createRestTemplate(final OAuth2ClientContext clientContext) {
+    public OAuth2RestTemplate restTemplate(final OAuth2ClientContext clientContext) {
         log.debug("At create rest template...");
-        ServletRequestAttributes attr = (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
-        HttpServletRequest request = attr.getRequest();
+        final HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         // Interrogate request to get providerId (e.g. look at url if nothing
         // else)
         String providerId = request.getParameter("providerId");
-        log.debug("Provider id is: " + providerId);
+        log.debug("Provider id is: {}", providerId);
         request.getSession().setAttribute("providerId", providerId);
         final OAuth2RestTemplate template = new OAuth2RestTemplate(getProtectedResourceDetails(providerId), clientContext);
-        template.setAccessTokenProvider(accessTokenProviderChain);
+        template.setAccessTokenProvider(ACCESS_TOKEN_PROVIDER_CHAIN);
         return template;
     }
 
-    public AuthorizationCodeResourceDetails getProtectedResourceDetails(String providerId) {
-        log.debug("Creating protected resource details of provider:" + providerId);
-        final String clientId = getProperty(providerId, "clientId");
-        final String clientSecret = getProperty(providerId, "clientSecret");
+    public AuthorizationCodeResourceDetails getProtectedResourceDetails(final String providerId) {
+        log.debug("Creating protected resource details of provider: {}", providerId);
+        final String clientId       = getProperty(providerId, "clientId");
+        final String clientSecret   = getProperty(providerId, "clientSecret");
         final String accessTokenUri = getProperty(providerId, "accessTokenUri");
-        final String userAuthUri = getProperty(providerId, "userAuthUri");
-        final String preEstablishedUri = getProps().getProperty("siteUrl")
-                + getProps().getProperty("preEstablishedRedirUri");
-        final String[] scopes = getProperty(providerId, "scopes").split(",");
+        final String userAuthUri    = getProperty(providerId, "userAuthUri");
+        final String preEstablishedUri = StringUtils.getIfBlank(getProps().getProperty("siteUrl"), _siteConfigPreferences::getSiteUrl)
+                                         + StringUtils.prependIfMissing(getProps().getProperty("preEstablishedRedirUri"), "/");
+        final List<String> scopes = Arrays.asList(StringUtils.split(getProperty(providerId, "scopes"), ", "));
+
         final PkceAuthorizationCodeResourceDetails details = new PkceAuthorizationCodeResourceDetails();
         details.setClientId(clientId);
         details.setClientSecret(clientSecret);
         details.setAccessTokenUri(accessTokenUri);
         details.setUserAuthorizationUri(userAuthUri);
-        details.setScope(Arrays.asList(scopes));
+        details.setScope(scopes);
         details.setPreEstablishedRedirectUri(preEstablishedUri);
         details.setUseCurrentUri(false);
         details.setPkceEnabled(isPkceEnabled(providerId));
         return details;
+    }
+
+    private boolean isPkceEnabled(final String providerId) {
+        final boolean pkceEnabled = Boolean.parseBoolean(getProperty(providerId, PKCE_ENABLED));
+        log.debug("Is PKCE Enabled: {}", pkceEnabled);
+        return pkceEnabled;
+    }
+
+    private Properties loadProps() {
+        final Map<String, ProviderAttributes> openIdProviders = _locator.getProviderDefinitionsByAuthMethod("openid");
+        if (openIdProviders.size() == 0) {
+            log.error("There are no OpenID providers configured");
+        } else if (openIdProviders.size() > 1) {
+            log.error("This plugin currently only supports one OpenID provider at a time, but I found {} providers defined: {}", openIdProviders.size(), StringUtils.join(openIdProviders.keySet(), ", "));
+        } else {
+            final String             providerId         = openIdProviders.keySet().iterator().next();
+            final ProviderAttributes providerDefinition = _locator.getProviderDefinition(providerId);
+            if (providerDefinition != null) {
+                return providerDefinition.getProperties();
+            }
+            log.error("Only one provider is enabled, but I can't find the provider definition for that ID: {}", providerId);
+        }
+        return new Properties();
     }
 }

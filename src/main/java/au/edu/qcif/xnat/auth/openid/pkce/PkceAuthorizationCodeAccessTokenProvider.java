@@ -4,11 +4,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.Iterator;
-import java.util.List;
-import java.util.TreeMap;
+import java.util.*;
 
+import lombok.Getter;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.client.filter.state.DefaultStateKeyGenerator;
@@ -25,9 +25,11 @@ import org.springframework.security.oauth2.common.exceptions.InvalidRequestExcep
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
-import au.edu.qcif.xnat.auth.openid.OpenIdAuthPlugin;
 import lombok.extern.slf4j.Slf4j;
 
+import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.CHUNK_SEPARATOR;
+
+@SuppressWarnings("deprecation")
 @Slf4j
 public class PkceAuthorizationCodeAccessTokenProvider extends AuthorizationCodeAccessTokenProvider {
 
@@ -55,96 +57,66 @@ public class PkceAuthorizationCodeAccessTokenProvider extends AuthorizationCodeA
 			}
 			obtainAuthorizationCode(resource, request);
 		}
-		return retrieveToken(request, resource, getParametersForTokenRequest(resource, request),
-				getHeadersForTokenRequest(request));
+		return retrieveToken(request, resource, getParametersForTokenRequest(resource, request), new HttpHeaders());
 
 	}
 
-	private HttpHeaders getHeadersForTokenRequest(AccessTokenRequest request) {
-		HttpHeaders headers = new HttpHeaders();
-		// No cookie for token request
-		return headers;
-	}
-
-	private MultiValueMap<String, String> getParametersForTokenRequest(AuthorizationCodeResourceDetails details,
-			AccessTokenRequest request) {
+	private MultiValueMap<String, String> getParametersForTokenRequest(AuthorizationCodeResourceDetails details, AccessTokenRequest request) {
 		PkceAuthorizationCodeResourceDetails resource = (PkceAuthorizationCodeResourceDetails) details;
 
-		MultiValueMap<String, String> form = new LinkedMultiValueMap<String, String>();
+		MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
 		form.set("grant_type", "authorization_code");
 		form.set("code", request.getAuthorizationCode());
 
-		Object preservedState = request.getPreservedState();
+		final Object preservedState = request.getPreservedState();
 
-		if (resource.isPkceEnabled()) {
-			if (preservedState instanceof PreservedState) {
-				PreservedState myPreservedState = (PreservedState)preservedState;
-				form.set("code_verifier", myPreservedState.getCodeVerifier());
-				log.debug("code_verifier parameter added");
-			}
-		}
-		
-		if (request.getStateKey() != null || stateMandatory) {
-			// The token endpoint has no use for the state so we don't send it back, but we
-			// are using it
-			// for CSRF detection client side...
-			if (preservedState == null) {
-				throw new InvalidRequestException(
-						"Possible CSRF detected - state parameter was required but no state could be found");
-			}
+		// The token endpoint has no use for the state, so we don't send it back, but we
+		// are using it for CSRF detection client side...
+		if ((request.getStateKey() != null || stateMandatory) && preservedState == null) {
+			throw new InvalidRequestException("Possible CSRF detected - state parameter was required but no state could be found");
 		}
 
-		// Extracting the redirect URI from a saved request should ignore the current
-		// URI, so it's not simply a call to
-		// resource.getRedirectUri()
-		String redirectUri = null;
-
-		// Get the redirect uri from the stored state
-		if (preservedState != null) {
-			if (preservedState instanceof String) {
-				redirectUri = String.valueOf(preservedState);
-			} else {
-				if (preservedState instanceof PreservedState) {
-					PreservedState myPreservedState = (PreservedState)preservedState;
-
-					if (myPreservedState.getRedirectUri() != null) {
-						redirectUri = myPreservedState.getRedirectUri();
-					}
-				}
-			}
+		if (resource.isPkceEnabled() && preservedState instanceof PreservedState) {
+			final String codeVerifier = ((PreservedState) preservedState).getCodeVerifier();
+			form.set("code_verifier", codeVerifier);
+			log.debug("Code verifier parameter added: {}", codeVerifier);
 		}
 
-		if (redirectUri == null) {
+		// Extracting the redirect URI from a saved request should ignore the current URI, so it's not simply a call to
+		// resource.getRedirectUri(). Try to get the redirect uri from the stored state, fall back to
+		// resource.getRedirectUri().
+		final String redirectUri;
+		if (preservedState instanceof String) {
+			redirectUri = String.valueOf(preservedState);
+		} else if (preservedState instanceof PreservedState && StringUtils.isNotBlank(((PreservedState) preservedState).getRedirectUri())) {
+			redirectUri = ((PreservedState) preservedState).getRedirectUri();
+		} else {
 			redirectUri = resource.getRedirectUri(request);
 		}
 
-		if (redirectUri != null && !"NONE".equals(redirectUri)) {
+		if (StringUtils.isNotBlank(redirectUri) && !StringUtils.equals("NONE", redirectUri)) {
 			form.set("redirect_uri", redirectUri);
 		}
 
 		return form;
-
 	}
 
-	private UserRedirectRequiredException getRedirectForAuthorization(AuthorizationCodeResourceDetails details,
-			AccessTokenRequest request) {
-		PkceAuthorizationCodeResourceDetails resource = (PkceAuthorizationCodeResourceDetails) details;
+	private UserRedirectRequiredException getRedirectForAuthorization(final AuthorizationCodeResourceDetails details, final AccessTokenRequest request) {
+		final PkceAuthorizationCodeResourceDetails resource = (PkceAuthorizationCodeResourceDetails) details;
 
 		// we don't have an authorization code yet. So first get that.
-		TreeMap<String, String> requestParameters = new TreeMap<String, String>();
+		final TreeMap<String, String> requestParameters = new TreeMap<>();
 		requestParameters.put("response_type", "code"); // oauth2 spec, section 3
 		requestParameters.put("client_id", resource.getClientId());
 
 		String codeVerifier = null;
 		if (resource.isPkceEnabled()) {
 			log.debug("Adding parameters related to PKCE");
-			codeVerifier = generateKey(96);
+			codeVerifier = generateKey();
 			try {
-				String codeChallenge = createHash(codeVerifier);
-				requestParameters.put("code_challenge", codeChallenge);
-				log.debug("code_challenge parameter added");
+				requestParameters.put("code_challenge", createHash(codeVerifier));
 				requestParameters.put("code_challenge_method", "S256");
-				log.debug("code_challenge_method parameter added");
+				log.debug("code_challenge and code_challenge_method parameters added");
 			} catch (Exception e) {
 				requestParameters.put("code_challenge", codeVerifier);
 				log.debug("code_challenge parameter added");
@@ -155,40 +127,24 @@ public class PkceAuthorizationCodeAccessTokenProvider extends AuthorizationCodeA
 
 		// Client secret is not required in the initial authorization request
 
-		String redirectUri = resource.getRedirectUri(request);
-		if (redirectUri != null) {
+		final String redirectUri = resource.getRedirectUri(request);
+		if (StringUtils.isNotBlank(redirectUri)) {
 			requestParameters.put("redirect_uri", redirectUri);
 		}
 
 		if (resource.isScoped()) {
-
-			StringBuilder builder = new StringBuilder();
-			List<String> scope = resource.getScope();
-
-			if (scope != null) {
-				Iterator<String> scopeIt = scope.iterator();
-				while (scopeIt.hasNext()) {
-					builder.append(scopeIt.next());
-					if (scopeIt.hasNext()) {
-						builder.append(' ');
-					}
-				}
-			}
-
-			requestParameters.put("scope", builder.toString());
+			requestParameters.put("scope", String.join(" ", Optional.ofNullable(resource.getScope()).orElseGet(Collections::emptyList)));
 		}
 
-		UserRedirectRequiredException redirectException = new UserRedirectRequiredException(
-				resource.getUserAuthorizationUri(), requestParameters);
+		final UserRedirectRequiredException redirectException = new UserRedirectRequiredException(resource.getUserAuthorizationUri(), requestParameters);
 
-		String stateKey = stateKeyGenerator.generateKey(resource);
+		final String stateKey = stateKeyGenerator.generateKey(resource);
 		redirectException.setStateKey(stateKey);
 		request.setStateKey(stateKey);
 		redirectException.setStateToPreserve(new PreservedState(redirectUri, codeVerifier));
 		request.setPreservedState(new PreservedState(redirectUri, codeVerifier));
 
 		return redirectException;
-
 	}
 
 	private static String createHash(String value) throws NoSuchAlgorithmException {
@@ -197,43 +153,24 @@ public class PkceAuthorizationCodeAccessTokenProvider extends AuthorizationCodeA
 		return encodeToByte64String(digest);
 	}
 
-	private static String generateKey(int keyLength) {
-		byte[] bytes = new byte[keyLength];
+	private static String generateKey() {
+		byte[] bytes = new byte[96];
 		SecureRandom random = new SecureRandom();
 		random.nextBytes(bytes);
 		return encodeToByte64String(bytes);
 	}
 
 	private static String encodeToByte64String(byte[] bytes) {
-		final byte[] CHUNK_SEPARATOR = { '\r', '\n' };
-		Base64 base64 = new Base64(0, CHUNK_SEPARATOR, true);
-		String base64Encoded = base64.encodeAsString(bytes);
-		return base64Encoded;
+		return new Base64(0, CHUNK_SEPARATOR, true).encodeAsString(bytes);
 	}
-	
-	static class PreservedState {
-		private String redirectUri;
 
-		private String codeVerifier;
+	@Getter
+	static class PreservedState {
+		private final String redirectUri;
+		private final String codeVerifier;
 		
 		public PreservedState(String redirectUri, String codeVerifier) {
 			this.redirectUri = redirectUri;
-			this.codeVerifier = codeVerifier;
-		}
-
-		public String getRedirectUri() {
-			return redirectUri;
-		}
-
-		public void setRedirectUri(String redirectUri) {
-			this.redirectUri = redirectUri;
-		}
-		
-		public String getCodeVerifier() {
-			return codeVerifier;
-		}
-
-		public void setCodeVerifier(String codeVerifier) {
 			this.codeVerifier = codeVerifier;
 		}
 	}
