@@ -29,7 +29,7 @@ To build the XNAT OpenID authentication provider plugin:
 
 1. Build the plugin:
 
-   `./gradlew clean fatJar`
+   `./gradlew clean xnatPluginJar`
 
    On Windows, you can use the batch file:
 
