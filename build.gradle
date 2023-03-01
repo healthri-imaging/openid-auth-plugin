@@ -54,8 +54,13 @@ configurations {
     }
 }
 
-dependencyManagement.imports {
-    mavenBom "org.nrg:parent:${vXnat}"
+dependencyManagement {
+    imports {
+        mavenBom "org.nrg:parent:${vXnat}"
+    }
+    generatedPomCustomization {
+        enabled = false
+    }
 }
 
 dependencies {
@@ -82,6 +87,8 @@ dependencies {
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
+    withSourcesJar()
+    withJavadocJar()
 }
 
 compileJava {
@@ -98,11 +105,6 @@ jacocoTestReport {
         csv.required = false
         html.required = true
     }
-}
-
-def mavenSettingsFile = hasProperty("mavenSettings") ? property("mavenSettings") : "${environment["HOME"]}/.m2/settings.xml"
-mavenSettings {
-    userSettingsFileName = mavenSettingsFile
 }
 
 // Pulls in the Jenkins BUILD_NUMBER environment variable if available.
@@ -159,22 +161,6 @@ Building artifacts with manifest attributes:
  * Implementation-Dirty:    ${isDirty}
 """
 
-task sourceJar(type: Jar, dependsOn: classes) {
-    classifier "sources"
-    manifest {
-        from gitManifest
-    }
-    from sourceSets.main.allSource
-}
-
-task javadocJar(type: Jar) {
-    classifier "javadoc"
-    manifest {
-        from gitManifest
-    }
-    from javadoc.destinationDir
-}
-
 jar {
     enabled = true
     manifest {
@@ -202,6 +188,13 @@ task xnatPluginJar(type: Jar) {
     with jar
 }
 
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        from gitManifest
+    }
+}
+
 sourceSets {
     main {
         java {
@@ -221,9 +214,9 @@ test {
 publishing {
     publications {
         mavenJava(MavenPublication) {
+            from components.java
+
             artifacts {
-                artifact sourceJar
-                artifact javadocJar
                 artifact xnatPluginJar
             }
 
@@ -233,6 +226,7 @@ publishing {
                 root.appendNode("url", "https://github.com/nrgxnat/xnat-openid-auth-plugin")
                 root.appendNode("inceptionYear", "2017")
 
+                /*
                 root.appendNode("scm").with {
                     appendNode("url", "https://github.com/nrgxnat/xnat-openid-auth-plugin")
                     appendNode("connection", "scm:https://github.com/nrgxnat/xnat-openid-auth-plugin")
@@ -272,6 +266,7 @@ publishing {
                         appendNode("email", "wcho24@wustl.edu")
                     }
                 }
+                */
             }
         }
     }
