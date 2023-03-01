@@ -226,7 +226,6 @@ publishing {
                 root.appendNode("url", "https://github.com/nrgxnat/xnat-openid-auth-plugin")
                 root.appendNode("inceptionYear", "2017")
 
-                /*
                 root.appendNode("scm").with {
                     appendNode("url", "https://github.com/nrgxnat/xnat-openid-auth-plugin")
                     appendNode("connection", "scm:https://github.com/nrgxnat/xnat-openid-auth-plugin")
@@ -266,7 +265,6 @@ publishing {
                         appendNode("email", "wcho24@wustl.edu")
                     }
                 }
-                */
             }
         }
     }
