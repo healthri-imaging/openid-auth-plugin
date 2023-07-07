@@ -99,6 +99,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         _siteConfigPreferences = siteConfigPreferences;
 
         _allowedDomains = _plugin.getEnabledProviders().stream().collect(Collectors.toMap(Function.identity(), this::getAllowedEmailDomains));
+        _allowedDomains.forEach((key, value) -> log.trace(key + " ------ " + value));
         // TODO: This should be initialized from or replaced by the SerializerService instance
         _objectMapper = new ObjectMapper();
     }
@@ -170,7 +171,6 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
             Map<String, String> userInfo = getUserInfo(accessToken.getValue(), userInfoUri);
             authInfo.putAll(userInfo);
         }
-
         final OpenIdConnectUserDetails user = new OpenIdConnectUserDetails(providerId, authInfo, accessToken, _plugin);
 
         if (shouldFilterEmailDomains(providerId) && !isAllowedEmailDomain(user.getEmail(), providerId)) {
@@ -246,7 +246,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
     }
 
     private boolean shouldFilterEmailDomains(final String providerId) {
-        return Boolean.parseBoolean(StringUtils.defaultIfBlank(_plugin.getProperty(providerId, "shouldFilterEmailDomains"), "false"));
+        return  Boolean.parseBoolean(StringUtils.defaultIfBlank(_plugin.getProperty(providerId, "shouldFilterEmailDomains"), "false"));
     }
 
     private List<String> getAllowedEmailDomains(final String providerId) {

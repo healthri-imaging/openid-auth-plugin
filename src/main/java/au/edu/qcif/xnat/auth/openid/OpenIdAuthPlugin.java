@@ -17,13 +17,11 @@
  */
 package au.edu.qcif.xnat.auth.openid;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import javax.servlet.http.HttpServletRequest;
 
+import au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.framework.annotations.XnatPlugin;
 import org.nrg.xdat.preferences.SiteConfigPreferences;
@@ -85,8 +83,8 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
     private final XdatUserAuthService                        _userAuthService;
     private final AuthenticationProviderConfigurationLocator _locator;
     private final SiteConfigPreferences                      _siteConfigPreferences;
-    private final Properties                                 _props;
-    private final List<String>                               _enabledProviders;
+    private final Properties                                 _props = new Properties();
+    private final List<String>                               _enabledProviders = new ArrayList<>();
 
     @Autowired
     public OpenIdAuthPlugin(final AuthenticationEventPublisher eventPublisher, final XdatUserAuthService userAuthService, final AuthenticationProviderConfigurationLocator locator, final SiteConfigPreferences siteConfigPreferences) {
@@ -94,8 +92,7 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
         _userAuthService       = userAuthService;
         _locator               = locator;
         _siteConfigPreferences = siteConfigPreferences;
-        _props                 = loadProps();
-        _enabledProviders      = Arrays.asList(_props.getProperty("enabled").split(","));
+        setup();
     }
 
     public boolean isEnabled(final String providerId) {
@@ -179,20 +176,26 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
         return pkceEnabled;
     }
 
-    private Properties loadProps() {
+    private void setup() {
         final Map<String, ProviderAttributes> openIdProviders = _locator.getProviderDefinitionsByAuthMethod("openid");
         if (openIdProviders.size() == 0) {
             log.error("There are no OpenID providers configured");
-        } else if (openIdProviders.size() > 1) {
-            log.error("This plugin currently only supports one OpenID provider at a time, but I found {} providers defined: {}", openIdProviders.size(), StringUtils.join(openIdProviders.keySet(), ", "));
         } else {
-            final String             providerId         = openIdProviders.keySet().iterator().next();
-            final ProviderAttributes providerDefinition = _locator.getProviderDefinition(providerId);
-            if (providerDefinition != null) {
-                return providerDefinition.getProperties();
-            }
-            log.error("Only one provider is enabled, but I can't find the provider definition for that ID: {}", providerId);
+            //Collate properties across all property definitions to facilitate multiple open id prop file
+           openIdProviders.forEach((providerId, v)  -> {
+               _enabledProviders.add(providerId);
+               final ProviderAttributes providerDefinition = _locator.getProviderDefinition(providerId);
+               if (providerDefinition != null) {
+                   _props.putAll(providerDefinition.getProperties());
+               } else {
+                   log.error("I can't find the provider definition for that ID: {}", providerId);
+               }
+           });
+           if (_props.isEmpty()) {
+               log.error("Could not set properties for available providers. Check the auth property files");
+           }
+           return;
         }
-        return new Properties();
     }
+
 }
