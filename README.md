@@ -62,11 +62,13 @@ It looks in the following locations:
 
 This plugin will use any entries located in any of those properties files where the property **type** is set to "openid". See the sample properties in the resources directory.
 
+Multiple open-id authentication servers can be configured using multiple properties file. The provider.id should be distinct across all properties files.
+
 The following properties control the plugin:
 
-### enabled
+### provider.id
 
-Comma delimited list of provide ids, currently tested with Google `google`, AAF `aaf`, and WUSTL `wustl`.
+An authentication provider is identified using the `provider.id`. The value should be unique across all authentication providers deployed in XNAT. `localdb` is a reserved provider id for the authentication performed by XNAT using the database.
 
 ### siteUrl
 
@@ -119,10 +121,6 @@ The optional URI of the UserInfo endpoint. If present then a call will be exchan
 ### openid.`providerId`.\*Property
 
 The property names used to populate user information during user creation. These are the property names from the information returned from the authentication provider.
-
-### disableUsernamePasswordLogin
-
-Toggle username & password login visibility on the login form
 
 ### openid.`providerId`.pkceEnabled
 

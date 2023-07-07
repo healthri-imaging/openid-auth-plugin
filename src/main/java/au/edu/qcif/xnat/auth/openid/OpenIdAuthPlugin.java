@@ -21,7 +21,6 @@ import java.util.*;
 
 import javax.servlet.http.HttpServletRequest;
 
-import au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.framework.annotations.XnatPlugin;
 import org.nrg.xdat.preferences.SiteConfigPreferences;
