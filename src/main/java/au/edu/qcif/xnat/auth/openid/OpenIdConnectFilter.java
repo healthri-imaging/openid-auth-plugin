@@ -99,7 +99,6 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         _siteConfigPreferences = siteConfigPreferences;
 
         _allowedDomains = _plugin.getEnabledProviders().stream().collect(Collectors.toMap(Function.identity(), this::getAllowedEmailDomains));
-        _allowedDomains.forEach((key, value) -> log.trace(key + " ------ " + value));
         // TODO: This should be initialized from or replaced by the SerializerService instance
         _objectMapper = new ObjectMapper();
     }

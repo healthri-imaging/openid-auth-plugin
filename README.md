@@ -68,7 +68,7 @@ The following properties control the plugin:
 
 ### provider.id
 
-An authentication provider is identified using the `provider.id`. The value should be unique across all authentication providers deployed in XNAT. `localdb` is a reserved provider id for the authentication performed by XNAT using the database.
+An authentication provider is identified using the `provider.id` value. The value should be unique across all authentication providers deployed in XNAT. `localdb` is a reserved provider id for the authentication performed by XNAT using the database.
 
 ### siteUrl
 
