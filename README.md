@@ -62,7 +62,7 @@ It looks in the following locations:
 
 This plugin will use any entries located in any of those properties files where the property **type** is set to "openid". See the sample properties in the resources directory.
 
-Multiple open-id authentication servers can be configured using multiple properties file. The provider.id should be distinct across all properties files.
+Multiple open-id authentication servers can be configured using multiple properties file. 
 
 The following properties control the plugin:
 
