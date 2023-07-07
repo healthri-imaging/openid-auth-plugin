@@ -83,7 +83,7 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
     private final AuthenticationProviderConfigurationLocator _locator;
     private final SiteConfigPreferences                      _siteConfigPreferences;
     private final Properties                                 _props = new Properties();
-    private final List<String>                               _enabledProviders = new ArrayList<>();
+    private final List<String>                     _openIdProviders = new ArrayList<>();
 
     @Autowired
     public OpenIdAuthPlugin(final AuthenticationEventPublisher eventPublisher, final XdatUserAuthService userAuthService, final AuthenticationProviderConfigurationLocator locator, final SiteConfigPreferences siteConfigPreferences) {
@@ -95,7 +95,7 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
     }
 
     public boolean isEnabled(final String providerId) {
-        return _enabledProviders.contains(providerId);
+        return _openIdProviders.contains(providerId);
     }
 
     public String getProperty(String providerId, String propName) {
@@ -107,7 +107,7 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
     }
 
     public List<String> getEnabledProviders() {
-        return _enabledProviders;
+        return _openIdProviders;
     }
 
     @Bean
@@ -182,7 +182,7 @@ public class OpenIdAuthPlugin extends BaseXnatSecurityExtension {
         } else {
             //Collate properties across all property definitions to facilitate multiple open id prop file
            openIdProviders.forEach((providerId, v)  -> {
-               _enabledProviders.add(providerId);
+               _openIdProviders.add(providerId);
                final ProviderAttributes providerDefinition = _locator.getProviderDefinition(providerId);
                if (providerDefinition != null) {
                    _props.putAll(providerDefinition.getProperties());
