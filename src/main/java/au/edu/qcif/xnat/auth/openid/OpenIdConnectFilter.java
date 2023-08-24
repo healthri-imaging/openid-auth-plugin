@@ -170,7 +170,6 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
             Map<String, String> userInfo = getUserInfo(accessToken.getValue(), userInfoUri);
             authInfo.putAll(userInfo);
         }
-
         final OpenIdConnectUserDetails user = new OpenIdConnectUserDetails(providerId, authInfo, accessToken, _plugin);
 
         if (shouldFilterEmailDomains(providerId) && !isAllowedEmailDomain(user.getEmail(), providerId)) {
@@ -224,7 +223,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         String userAutoVerified = _plugin.getProperty(providerId, "userAutoVerified");
 
         UserI xdatUser = Users.createUser();
-        xdatUser.setLogin(user.getUsername());
+        xdatUser.setLogin(user.getUsername().replace("|", "_"));
         xdatUser.setFirstname(user.getFirstname());
         xdatUser.setLastname(user.getLastname());
         xdatUser.setEmail(user.getEmail());
@@ -235,7 +234,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         try {
             UserI adminUser = Users.getAdminUser();
             Users.save(xdatUser, adminUser,
-                       new XdatUserAuth(user.getUsername(), XdatUserAuthService.OPENID, providerId),
+                       new XdatUserAuth(user.getUsername(), XdatUserAuthService.OPENID, providerId, xdatUser.getLogin(), true, 0),
                        false, new EventDetails(EventUtils.CATEGORY.DATA, EventUtils.TYPE.WEB_SERVICE,
                                                "Added User", "Requested by user " + adminUser.getUsername(),
                                                "Created new user " + user.getUsername() + " through OpenID connect."));
@@ -246,7 +245,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
     }
 
     private boolean shouldFilterEmailDomains(final String providerId) {
-        return Boolean.parseBoolean(StringUtils.defaultIfBlank(_plugin.getProperty(providerId, "shouldFilterEmailDomains"), "false"));
+        return  Boolean.parseBoolean(StringUtils.defaultIfBlank(_plugin.getProperty(providerId, "shouldFilterEmailDomains"), "false"));
     }
 
     private List<String> getAllowedEmailDomains(final String providerId) {
