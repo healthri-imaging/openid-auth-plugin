@@ -17,10 +17,17 @@
             <fileNamePattern>${xnat.home}/logs/openid.log.%d{yyyy-MM-dd}</fileNamePattern>
         </rollingPolicy>
     </appender>
-    <logger name="au.edu.qcif.xnat.auth.openid" additivity="false" level="INFO">
+    <logger name="au.edu.qcif.xnat.auth.openid" additivity="false" level="DEBUG">
         <appender-ref ref="openid"/>
     </logger>
     <logger name="au.edu.qcif.xnat.auth.openid.OpenIdAuthPlugin" additivity="false" level="DEBUG">
+        <appender-ref ref="openid"/>
+    </logger>
+    <logger name="org.springframework.security.oauth2" additivity="false" level="DEBUG">
+        <appender-ref ref="openid"/>
+    </logger>
+    
+    <logger name="org.springframework.web.client.RestTemplate" additivity="false" level="DEBUG">
         <appender-ref ref="openid"/>
     </logger>
 </configuration>
