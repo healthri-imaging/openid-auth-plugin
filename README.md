@@ -4,7 +4,7 @@ Tested with [Google's OpenID Connect](https://developers.google.com/identity/pro
 
 ## Pre-requisities
 
-This plugin is for use with XNAT 1.7.5.x releases.
+This plugin is for use with XNAT 1.8.7 releases or newer
 
 There are 2 ways to deploy XNAT-Web:
 
@@ -16,10 +16,10 @@ Again there are 2 ways to accomplish this:
 
 ### 1. Download the pre-built JAR
 
-1. Download the latest development version [here](http://dev.redboxresearchdata.com.au/nexus/service/local/artifact/maven/redirect?r=snapshots&g=au.edu.qcif.xnat.openid&a=openid-auth-plugin&v=LATEST&e=jar)
+1. Download the latest development version [here](https://nrgxnat.jfrog.io/ui/repos/tree/General/libs-release-local/au/edu/qcif/xnat/openid/openid-auth-plugin)
 
 1. Copy the plugin jar to your plugins folder:
-   `cp build/libs/xnat-openid-auth-plugin-all-1.0.0-SNAPSHOT.jar /data/xnat/home/plugins`
+   `cp build/libs/openid-auth-plugin-x.x.x-SNAPSHOT.jar /data/xnat/home/plugins`
 
 ### 2. Build the code and generate the JAR
 
@@ -29,15 +29,19 @@ To build the XNAT OpenID authentication provider plugin:
 
 1. Build the plugin:
 
-   `./gradlew clean xnatPluginJar`
+   `./gradlew clean xnatPluginJar --exclude-task test`
 
    On Windows, you can use the batch file:
 
-   `gradlew.bat clean fatJar`
+   `gradlew.bat clean xnatPluginJar --exclude-task test`
 
-This should build the plugin in the file **build/libs/xnat-openid-auth-plugin-all-_1.0.0-SNAPSHOT_.jar** (the version may differ based on updates to the code).
+   Currently this plugin needs to be build using java jdk version 8. If you have a newer version of java installed, you can install something like `openjdk-8-jdk` and you can then supply the correct path to the JAVA_HOME like below:
 
-1. Build the plugin jar or download the latest development version [here](http://dev.redboxresearchdata.com.au/nexus/service/local/artifact/maven/redirect?r=snapshots&g=au.edu.qcif.xnat.openid&a=openid-auth-plugin&v=LATEST&e=jar)
+   `./gradlew -Dorg.gradle.java.home=/usr/lib/jvm/java-8-openjdk-amd64/ build xnatPluginJar --exclude-task test`
+
+This should build the plugin in the file **build/libs/openid-auth-plugin-x.x.x-SNAPSHOT.jar** (the version `x.x.x` may differ based on updates to the code).
+
+1. Build the plugin jar or download the [latest development version from here](https://nrgxnat.jfrog.io/ui/repos/tree/General/libs-snapshot-local/au/edu/qcif/xnat/openid/openid-auth-plugin)
 
 1. Optionally run the tests:
 
@@ -45,7 +49,7 @@ This should build the plugin in the file **build/libs/xnat-openid-auth-plugin-al
 
 1. Copy the plugin jar to your plugins folder:
 
-   `cp build/libs/xnat-openid-auth-plugin-all-1.0.0-SNAPSHOT.jar /data/xnat/home/plugins`
+   `cp build/libs/openid-auth-plugin-x.x.x-SNAPSHOT.jar /data/xnat/home/plugins`
 
 ## Configuring and Testing
 
