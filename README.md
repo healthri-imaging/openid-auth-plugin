@@ -25,7 +25,7 @@ Again there are 2 ways to accomplish this:
 
 To build the XNAT OpenID authentication provider plugin:
 
-1. If you haven't already, clone [this repository](https://github.com/qcif/xnat-openid-auth-plugin.git) and cd to the newly cloned folder.
+1. If you haven't already, clone [this repository](https://bitbucket.org/xnatx/openid-auth-plugin) and cd to the newly cloned folder.
 
 1. Build the plugin:
 
