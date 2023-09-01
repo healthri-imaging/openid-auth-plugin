@@ -41,6 +41,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -168,9 +169,12 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         final String userInfoUri = _plugin.getProperty(providerId, "userInfoUri");
         if (!StringUtils.isEmpty(userInfoUri)) {
             Map<String, String> userInfo = getUserInfo(accessToken.getValue(), userInfoUri);
+            log.debug("Got userinfo: {}", userInfo);
             authInfo.putAll(userInfo);
+            log.debug("Added userinfo to authInfo {}", authInfo);
         }
         final OpenIdConnectUserDetails user = new OpenIdConnectUserDetails(providerId, authInfo, accessToken, _plugin);
+        log.debug("Got OpenIDConnectUserDetail: {}", user);
 
         if (shouldFilterEmailDomains(providerId) && !isAllowedEmailDomain(user.getEmail(), providerId)) {
             throw new NewAutoAccountNotAutoEnabledException("New OpenID user, email is not on the domain whitelist.", user);
@@ -290,7 +294,9 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         final HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
-        return GenericUtils.convertToTypedMap(_restTemplate.exchange(userInfoEndpoint, HttpMethod.GET, new HttpEntity<>(headers), Map.class).getBody(), String.class, String.class);
+        final ResponseEntity<Map> response = _restTemplate.exchange(userInfoEndpoint, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+        log.debug("Response from userEndPoint: {}", response.getBody());
+        return GenericUtils.convertToTypedMap(response.getBody(), String.class, String.class);
     }
 
     private static class NoopAuthenticationManager implements AuthenticationManager {
