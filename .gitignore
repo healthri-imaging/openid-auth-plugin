@@ -10,3 +10,4 @@ dep*.txt
 .settings
 .classpath
 .project
+.vscode/settings.json
