@@ -23,12 +23,15 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xdat.security.XDATUser;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import au.edu.qcif.xnat.auth.openid.helpers.NamedStringFormatter;
 
 import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
+import static org.nrg.xdat.security.helpers.Users.EXPRESSION_USERNAME;
 
 /**
  * OIDC user details
@@ -36,6 +39,7 @@ import static au.edu.qcif.xnat.auth.openid.etc.OpenIdAuthConstant.*;
  * @author <a href="https://github.com/shilob">Shilo Banihit</a>
  */
 @SuppressWarnings({"ExternalizableWithoutPublicNoArgConstructor", "deprecation"})
+@Slf4j
 public class OpenIdConnectUserDetails extends XDATUser {
     private static final long    serialVersionUID         = -1568972028866924986L;
     private static final Pattern EXTRACTOR                = Pattern.compile("\\[([a-zA-Z0-9_]+)]");
@@ -43,17 +47,17 @@ public class OpenIdConnectUserDetails extends XDATUser {
 
     private       OAuth2AccessToken   token;
     private       String              email;
-    private final Map<String, String> openIdUserInfo;
+    private final Map<String, Object> openIdUserInfo;
     private       String              firstName;
     private       String              lastName;
     private       String              username;
     private final String              providerId;
     private final OpenIdAuthPlugin    plugin;
 
-    public OpenIdConnectUserDetails(String providerId, Map<String, String> userInfo, OAuth2AccessToken token, OpenIdAuthPlugin plugin) {
+    public OpenIdConnectUserDetails(String providerId, Map<String, Object> userInfo, OAuth2AccessToken token, OpenIdAuthPlugin plugin) {
         this.openIdUserInfo = userInfo;
         this.providerId     = providerId;
-        this.setUsername(resolvePattern(plugin.getProperty(providerId, USERNAME_PATTERN)));
+        this.setUsername(formatUserName(plugin.getProperty(providerId, USERNAME_PATTERN)));
         this.token  = token;
         this.plugin = plugin;
 
@@ -62,18 +66,18 @@ public class OpenIdConnectUserDetails extends XDATUser {
         this.setLastname(getUserInfo(userInfo, FAMILY_NAME));
     }
 
-    public String getFieldValue(String fieldName) {
-        String value = null;
-        try {
-            Field field = this.getClass().getDeclaredField(fieldName);
-            value = (String) field.get(this);
-        } catch (Exception e) {
-            if (openIdUserInfo != null) {
-                value = openIdUserInfo.get(fieldName);
-            }
-        }
-        return value;
-    }
+    //public String getFieldValue(String fieldName) {
+    //    String value = null;
+    //    try {
+    //        Field field = this.getClass().getDeclaredField(fieldName);
+    //        value = (String) field.get(this);
+    //    } catch (Exception e) {
+    //        if (openIdUserInfo != null) {
+    //            value = openIdUserInfo.get(fieldName);
+    //        }
+    //    }
+    //    return value;
+    //}
 
     public OAuth2AccessToken getToken() {
         return token;
@@ -84,7 +88,7 @@ public class OpenIdConnectUserDetails extends XDATUser {
     }
 
     public void setUsername(String username) {
-        this.username = username;
+        this.username = sanitizeUsername(username);
     }
 
     public String getUsername() {
@@ -115,27 +119,77 @@ public class OpenIdConnectUserDetails extends XDATUser {
         this.lastName = lastname;
     }
 
-    private String getUserInfo(final Map<String, String> userInfo, String propName) {
-        String propVal = userInfo.get(plugin.getProperty(providerId, propName));
+    private String getUserInfo(final Map<String, Object> userInfo, String propName) {
+        String propVal = (String) userInfo.get(plugin.getProperty(providerId, propName));
         return propVal != null ? propVal : "";
     }
 
-    private String resolvePattern(final String usernamePattern) {
-        final String  pattern = StringUtils.defaultIfBlank(usernamePattern, DEFAULT_USERNAME_PATTERN);
-        final Matcher matcher = EXTRACTOR.matcher(pattern);
+    private String formatUserName(final String usernameFormat) {
+        // // Merge the user information and the plug
+        // Map<String, Object> data = new HashMap<>();
+        // //data.put("provider", this);
+        // data.put("user", this.openIdUserInfo);
+        this.openIdUserInfo.put("providerId", this.providerId);
 
-        HashMap<String, String> pairs = new HashMap<>();
+        log.debug("Data that can be used is: {}", this.openIdUserInfo);
+        NamedStringFormatter formatter = new NamedStringFormatter(this.openIdUserInfo);
+        log.debug("Formatter loaded!!!");
+        
+        //String formatString = "{provider.providerId}-{user.uid.0}";
+        String formatString = "{user.uid.0}";
+        log.debug("The username format string is: {}", formatString);
 
-        final AtomicInteger index = new AtomicInteger();
-        while (matcher.find(index.get())) {
-            pairs.put(matcher.group(0), matcher.group(1));
-            index.set(matcher.end());
+        String formattedText = formatter.format(formatString);
+        log.debug("-> result: {}", formattedText);
+
+        return formattedText;
+    }
+
+    //private String resolvePattern(final String usernamePattern) {
+    //    final String  pattern = StringUtils.defaultIfBlank(usernamePattern, DEFAULT_USERNAME_PATTERN);
+    //    final Matcher matcher = EXTRACTOR.matcher(pattern);
+
+    //    HashMap<String, String> pairs = new HashMap<>();
+
+    //    final AtomicInteger index = new AtomicInteger();
+    //    while (matcher.find(index.get())) {
+    //        pairs.put(matcher.group(0), matcher.group(1));
+    //        index.set(matcher.end());
+    //    }
+
+    //    String converted = pattern;
+    //    for (final String key : pairs.keySet()) {
+    //        converted = converted.replace(key, getFieldValue(pairs.get(key)));
+    //    }
+    //    return converted;
+    //}
+
+    /**
+     * Sanitizes the username based on the allowed username characters as defined in xdat core. The sanitation method is 
+     * to remove the characters that are not in the allowed character specification.
+     *
+     * @param username The username to sanitize
+     *
+     * @return Returns the sanitized username
+     */
+    private static String sanitizeUsername(String username) {
+        // The allowed pattern of a username is defined globally in org.nrg.xdat.security.helpers.User.PATTERN_USERNAME
+        Pattern allowedPattern = Pattern.compile(EXPRESSION_USERNAME);
+        // Create a Matcher object from the global username allowed characters Pattern
+        Matcher matcher = allowedPattern.matcher(username);
+        
+        // Initialize a StringBuilder to store the sanitized username
+        StringBuilder sanitizedUsername = new StringBuilder();
+        
+        log.debug("Sanitizing username: {}", username);
+        log.debug("* Using the following pattern for allowed characters: {}", allowedPattern.pattern());
+        // Iterate through the input username and append only the allowed characters
+        while (matcher.find()) {
+            sanitizedUsername.append(matcher.group());
         }
-
-        String converted = pattern;
-        for (final String key : pairs.keySet()) {
-            converted = converted.replace(key, getFieldValue(pairs.get(key)));
-        }
-        return converted;
+        log.debug("-> result: {}", sanitizedUsername.toString());
+        
+        // Convert the StringBuilder to a string
+        return sanitizedUsername.toString();
     }
 }

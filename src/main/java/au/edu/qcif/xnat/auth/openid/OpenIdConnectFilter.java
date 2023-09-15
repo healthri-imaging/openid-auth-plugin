@@ -164,11 +164,11 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         final Jwt    tokenDecoded = JwtHelper.decode(idToken);
 
         log.debug("===== : {}", tokenDecoded.getClaims());
-        final Map<String, String> authInfo = GenericUtils.convertToTypedMap(_objectMapper.readValue(tokenDecoded.getClaims(), Map.class), String.class, String.class);
+        final Map<String, Object> authInfo = GenericUtils.convertToTypedMap(_objectMapper.readValue(tokenDecoded.getClaims(), Map.class), String.class, Object.class);
 
         final String userInfoUri = _plugin.getProperty(providerId, "userInfoUri");
         if (!StringUtils.isEmpty(userInfoUri)) {
-            Map<String, String> userInfo = getUserInfo(accessToken.getValue(), userInfoUri);
+            Map<String, Object> userInfo = getUserInfo(accessToken.getValue(), userInfoUri);
             log.debug("Got userinfo: {}", userInfo);
             authInfo.putAll(userInfo);
             log.debug("Added userinfo to authInfo {}", authInfo);
@@ -227,7 +227,7 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         String userAutoVerified = _plugin.getProperty(providerId, "userAutoVerified");
 
         UserI xdatUser = Users.createUser();
-        xdatUser.setLogin(user.getUsername().replace("|", "_"));
+        xdatUser.setLogin(user.getUsername());
         xdatUser.setFirstname(user.getFirstname());
         xdatUser.setLastname(user.getLastname());
         xdatUser.setEmail(user.getEmail());
@@ -289,14 +289,17 @@ public class OpenIdConnectFilter extends AbstractAuthenticationProcessingFilter 
         return _siteConfigPreferences;
     }
 
-    private Map<String, String> getUserInfo(final String accessToken, final String userInfoEndpoint) {
+    private Map<String, Object> getUserInfo(final String accessToken, final String userInfoEndpoint) {
         // See https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
         final HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
+        // Send the request to the userInfo endpoint
         final ResponseEntity<Map> response = _restTemplate.exchange(userInfoEndpoint, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
-        log.debug("Response from userEndPoint: {}", response.getBody());
-        return GenericUtils.convertToTypedMap(response.getBody(), String.class, String.class);
+        Map<String, Object> userInfo = response.getBody();
+        log.debug("Response from userEndPoint: {}", userInfo);
+        return userInfo;
+        //return GenericUtils.convertToTypedMap(response.getBody(), String.class, String.class);
     }
 
     private static class NoopAuthenticationManager implements AuthenticationManager {

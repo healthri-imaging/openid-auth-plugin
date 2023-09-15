@@ -4,7 +4,7 @@ Tested with [Google's OpenID Connect](https://developers.google.com/identity/pro
 
 ## Pre-requisities
 
-This plugin is for use with XNAT 1.8.7 releases or newer
+This plugin is for use with XNAT 1.8.9 releases or newer
 
 There are 2 ways to deploy XNAT-Web:
 
