@@ -66,19 +66,6 @@ public class OpenIdConnectUserDetails extends XDATUser {
         this.setLastname(getUserInfo(userInfo, FAMILY_NAME));
     }
 
-    //public String getFieldValue(String fieldName) {
-    //    String value = null;
-    //    try {
-    //        Field field = this.getClass().getDeclaredField(fieldName);
-    //        value = (String) field.get(this);
-    //    } catch (Exception e) {
-    //        if (openIdUserInfo != null) {
-    //            value = openIdUserInfo.get(fieldName);
-    //        }
-    //    }
-    //    return value;
-    //}
-
     public OAuth2AccessToken getToken() {
         return token;
     }
@@ -125,44 +112,22 @@ public class OpenIdConnectUserDetails extends XDATUser {
     }
 
     private String formatUserName(final String usernameFormat) {
-        // // Merge the user information and the plug
-        // Map<String, Object> data = new HashMap<>();
-        // //data.put("provider", this);
-        // data.put("user", this.openIdUserInfo);
+        // Merge the user information and the plug
+        //Map<String, Object> data = new HashMap<>();
+        //data.put("provider", this);
+        //data.put("user", this.openIdUserInfo);
+
         this.openIdUserInfo.put("providerId", this.providerId);
 
         log.debug("Data that can be used is: {}", this.openIdUserInfo);
-        NamedStringFormatter formatter = new NamedStringFormatter(this.openIdUserInfo);
-        log.debug("Formatter loaded!!!");
-        
-        //String formatString = "{provider.providerId}-{user.uid.0}";
-        String formatString = "{user.uid.0}";
-        log.debug("The username format string is: {}", formatString);
+        log.debug("The username format string is: {}", usernameFormat);
 
-        String formattedText = formatter.format(formatString);
+        NamedStringFormatter stringFormatter = new NamedStringFormatter(this.openIdUserInfo);
+        String formattedText = stringFormatter.format(usernameFormat);
         log.debug("-> result: {}", formattedText);
 
         return formattedText;
     }
-
-    //private String resolvePattern(final String usernamePattern) {
-    //    final String  pattern = StringUtils.defaultIfBlank(usernamePattern, DEFAULT_USERNAME_PATTERN);
-    //    final Matcher matcher = EXTRACTOR.matcher(pattern);
-
-    //    HashMap<String, String> pairs = new HashMap<>();
-
-    //    final AtomicInteger index = new AtomicInteger();
-    //    while (matcher.find(index.get())) {
-    //        pairs.put(matcher.group(0), matcher.group(1));
-    //        index.set(matcher.end());
-    //    }
-
-    //    String converted = pattern;
-    //    for (final String key : pairs.keySet()) {
-    //        converted = converted.replace(key, getFieldValue(pairs.get(key)));
-    //    }
-    //    return converted;
-    //}
 
     /**
      * Sanitizes the username based on the allowed username characters as defined in xdat core. The sanitation method is 

@@ -1,59 +1,62 @@
 package au.edu.qcif.xnat.auth.openid.helpers;
 
-import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class NamedStringFormatter {
-    private Map<String, Object> data = new HashMap<>();
+    private static final Pattern EXTRACTOR = Pattern.compile("\\[([a-zA-Z0-9_.]+)]");
+    private Map<String, Object> data;
 
     public NamedStringFormatter(Map<String, Object> data) {
         this.data = data;
     }
 
-    public void setData(Map<String, Object> data) {
-        this.data = data;
-    }
-
-    public String format(String formatString) {
-        // Replace placeholders in the format string using MessageFormat
-        log.debug("Start of formatter, using: {}", formatString);
-        Object[] args = new Object[data.size()];
-        log.debug("Created Object[]");
-        int index = 0;
-        for (Map.Entry<String, Object> entry : data.entrySet()) {
-            log.debug("=> [{}] entry: {}, value: {}", index, entry, entry.getValue());
-            args[index++] = entry.getValue();
-        }
+    public String getValue(String key) {
+        log.debug("fieldName: "+ key);
+        String[] parts = key.split("\\.");
         
-        log.debug("Args: {}", args);
-        String formattedString = MessageFormat.format(formatString, args);
-        log.debug("formattedString first pass: {}", formattedString);
 
-        // Now, let's handle list indexing
-        for (Map.Entry<String, Object> entry : data.entrySet()) {
-            String placeholder = "{" + entry.getKey() + ".";
-            
-            log.debug("Placeholder: ", placeholder);
-
-            if (formattedString.contains(placeholder)) {
-                Object value = entry.getValue();
-                log.debug("Value: {}", value);
-                log.debug("value type: {}", value.getClass());
-                if (value instanceof List) {
-                    List<?> list = (List<?>) value;
-                    for (int i = 0; i < list.size(); i++) {
-                        String listPlaceholder = placeholder + i + "}";
-                        formattedString = formattedString.replace(listPlaceholder, list.get(i).toString());
-                    }
-                }
+        // Traverse the nested Object (assuming containing Maps and/or Lists) using the splitted parts
+        Object result = this.data;
+        for (String part : parts) {
+            if (result instanceof Map && ((Map<?, ?>) result).containsKey(part)) {
+                result = ((Map<?,?>) result).get(part);
+            } else if (result instanceof List && ((List<?>) result).size() >= Integer.valueOf(part)) {
+                result = ((List<?>) result).get(Integer.valueOf(part));
+            } else {
+                result = null;
+                break;
             }
         }
 
-        return formattedString;
+        //TDOD: catch exceptions when casting fails
+        String value = (String) result;
+        log.debug("* Value from data object: " + value);
+        return value;
     }
 
+    public String format(final String usernamePattern) {
+        final String  pattern = usernamePattern;
+        final Matcher matcher = EXTRACTOR.matcher(pattern);
+
+        HashMap<String, String> pairs = new HashMap<>();
+
+        final AtomicInteger index = new AtomicInteger();
+        while (matcher.find(index.get())) {
+            pairs.put(matcher.group(0), matcher.group(1));
+            index.set(matcher.end());
+        }
+
+        String converted = pattern;
+        for (final String key : pairs.keySet()) {
+            converted = converted.replace(key, getValue(pairs.get(key)));
+        }
+        return converted;
+    }
 }
